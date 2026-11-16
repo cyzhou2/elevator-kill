@@ -145,6 +145,27 @@
     KeyP: 'pause', KeyR: 'reset'
   };
 
+  /** 统一的一次性动作入口：键盘和触屏都走这里 */
+  function doAction(act) {
+    if (!human || !human.alive || paused || world.finished) return;
+    if (EK.UI.introOpen && EK.UI.introOpen()) return;
+    if (act === 'space') world.humanAction(human, 'space');
+    else if (act === 'up') actUp();
+    else if (act === 'down') actDown();
+    else if (act === 'q') actQ();
+    else if (act === 'e') actE();
+  }
+
+  /** 触屏：left/right 是按住持续走，其余是点一下触发一次 */
+  function touch(action, pressed) {
+    if (action === 'left') { keys.left = pressed; return; }
+    if (action === 'right') { keys.right = pressed; return; }
+    if (!pressed) return;
+    if (action === 'pause') { setPaused(!paused); return; }
+    if (action === 'reset') { boot(); return; }
+    doAction(action);
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
@@ -155,14 +176,7 @@
     e.preventDefault();
     if (act === 'pause') { setPaused(!paused); return; }
     if (act === 'reset') { boot(); return; }
-    if (!human || !human.alive || paused || world.finished) return;
-    if (EK.UI.introOpen && EK.UI.introOpen()) return;
-
-    if (act === 'space') world.humanAction(human, 'space');
-    else if (act === 'up') actUp();
-    else if (act === 'down') actDown();
-    else if (act === 'q') actQ();
-    else if (act === 'e') actE();
+    doAction(act);
   });
 
   document.addEventListener('keyup', (e) => {
@@ -196,6 +210,39 @@
 
   window.addEventListener('resize', () => { if (world) renderer.resize(world); });
 
+  /* ---------- 触屏手柄 ---------- */
+  (function initTouch() {
+    const box = $('touch');
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const narrow = () => window.innerWidth <= 900 || window.innerHeight > window.innerWidth;
+    const sync = () => { box.classList.toggle('hidden', !(coarse || narrow())); };
+    sync();
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', () => setTimeout(() => { sync(); if (world) renderer.resize(world); }, 120));
+
+    for (const btn of box.querySelectorAll('.tb')) {
+      const act = btn.dataset.act;
+      const down = (e) => {
+        e.preventDefault();
+        btn.classList.add('on');
+        if (btn.setPointerCapture && e.pointerId != null) { try { btn.setPointerCapture(e.pointerId); } catch (_) {} }
+        touch(act, true);
+      };
+      const up = (e) => {
+        if (e) e.preventDefault();
+        btn.classList.remove('on');
+        touch(act, false);
+      };
+      btn.addEventListener('pointerdown', down);
+      btn.addEventListener('pointerup', up);
+      btn.addEventListener('pointercancel', up);
+      btn.addEventListener('pointerleave', up);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+    // 手机上没有键盘，靠这两个键暂停/重开
+    $('btnPause').addEventListener('click', () => {});
+  })();
+
   function setPaused(v) {
     paused = !!v;
     const btn = $('btnPause');
@@ -222,6 +269,7 @@
     get paused() { return paused; },
     get renderer() { return renderer; },
     keys,
+    touch,
     boot,
     setPaused(v) { paused = !!v; },
     showEnd,

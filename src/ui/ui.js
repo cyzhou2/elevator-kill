@@ -213,7 +213,17 @@
       $('scoreList').innerHTML = rows.join('');
 
       this.renderYou(world, human);
+      this.renderTouch(human);
       this.renderLog(world, human, settings.view === 'fog');
+    },
+
+    /** 触屏上 ▲/▼ 两个小键：电梯厅里是呼梯，轿厢里变成开门/关门 */
+    renderTouch(human) {
+      const q = $('tbQ'), e = $('tbE');
+      if (!q || !e) return;
+      const inCar = human && human.location.type === 'car';
+      q.textContent = inCar ? '关门' : '▼';
+      e.textContent = inCar ? '开门' : '▲';
     },
 
     renderYou(world, human) {

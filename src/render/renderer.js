@@ -10,7 +10,7 @@
     label: '#7c8b9d', landing: '#2b3a4d', lobby: '#1d2836',
     shaft: '#10161e', car: '#3a4b60', carEdge: '#5d748d',
     kid: '#3ddc84', killer: '#ff4d5f', you: '#ffd166', intel: '#ff9aa4',
-    call: '#8fd3ff'
+    call: '#8fd3ff', floorLabel: '#8fa2b6', floorMajor: '#cfe3ff'
   };
 
   class Renderer {
@@ -29,18 +29,26 @@
       this.canvas.width = Math.round(W * dpr);
       this.canvas.height = Math.round(H * dpr);
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const padTop = 20, padBottom = 18, padLeft = 150, padRight = 132;
+      const padTop = 20, padBottom = 18;
+      // 窄屏（手机竖屏）把两侧收窄，把空间留给楼层本身
+      const narrow = W < 640;
+      const btnW = narrow ? 15 : 20, btnH = narrow ? 12 : 16, btnGap = narrow ? 3 : 4;
+      const groupW = btnW * 2 + btnGap;
+      const labelRight = narrow ? 24 : 30;
+      const groupX = narrow ? 30 : 36;
+      const padLeft = narrow ? 86 : 108, padRight = narrow ? 86 : 108;
       const floors = world.cfg.floors;
       const rowH = (H - padTop - padBottom) / floors;
       const cw = W - padLeft - padRight;
       const L = world.building.L;
       this.geo = {
         W, H, padTop, padBottom, padLeft, padRight, floors, rowH, cw, L,
+        narrow, btnW, btnH, btnGap, groupW, labelRight, groupX,
         xM: (m) => padLeft + (m / L) * cw,
         yFloor: (f) => padTop + (floors - f) * rowH + rowH * 0.5,
         yRowTop: (f) => padTop + (floors - f) * rowH,
-        shaftA: padLeft - 34,
-        shaftB: W - padRight + 34
+        shaftA: padLeft - 12,
+        shaftB: W - padRight + 12
       };
       return this.geo;
     }
@@ -77,7 +85,7 @@
       // 呼梯按钮：画布最左 = C 的一组，最右 = D 的一组，按楼层对齐；
       // 人在轿厢里时这两列换成选层面板
       const inCar = focus && focus.location.type === 'car';
-      if (!inCar) this.drawHallColumns(world, g, fog, focus);
+      if (!inCar) this.drawHallButtons(world, g, fog, focus);
 
       // 角色：先画拖尾再画点（有限视角下看不见的人不画，避免泄露位置）
       const shown = [];
@@ -171,11 +179,14 @@
         ctx.textAlign = 'left';
       }
 
-      ctx.fillStyle = COL.label;
-      ctx.font = '11px ui-monospace, monospace';
+      // 1–20F 楼层标记：两边都标，加粗、按 5 层一档加深，扫一眼就能对上按钮
+      const isMajor = f % 5 === 0;
+      ctx.fillStyle = isMajor ? COL.floorMajor : COL.floorLabel;
+      ctx.font = `bold ${g.narrow ? 9 : 11}px ui-monospace, monospace`;
       ctx.textAlign = 'right';
-      ctx.fillText(`${f}F`, g.padLeft - 10, y + 4);
+      ctx.fillText(`${f}F`, g.labelRight, y + 4);
       ctx.textAlign = 'left';
+      ctx.fillText(`${f}F`, g.W - g.labelRight, y + 4);
     }
 
     drawStairShaft(landing, x, g) {
@@ -293,59 +304,52 @@
       return world.hallButtonSpecs();
     }
 
-    /** 画布最左一列 = C 的按钮，最右一列 = D 的按钮，每层对齐一行 */
-    drawHallColumns(world, g, fog, focus) {
+    /** 每层那一条横线的左右两头：左端 C 的 ▼▲，右端 D 的 ▼▲，跟着楼层行走 */
+    drawHallButtons(world, g, fog, focus) {
       const ctx = this.ctx;
       const split = world.cfg.elevator.hallButtons === 'split';
-      const bw = 20, bh = 16, gap = 4;
-      const leftX = 10;
-      const rightX = g.W - 10 - bw;
+      const bw = g.btnW, bh = g.btnH;
       const focusFloor = focus && focus.location.type === 'floor' ? focus.location.floor : null;
+      const leftX = g.groupX;
+      const rightX = g.W - g.groupX - g.groupW;
       const active = (f) => !fog && (!focus || focusFloor === f);
 
-      // 两列的底板
-      const top = g.yRowTop(g.floors) - 4, bottom = g.yRowTop(1) + g.rowH + 4;
-      for (const [x0, w] of [[6, split ? bw * 2 + gap + 8 : bw + 8], [g.W - 6 - (split ? bw * 2 + gap + 8 : bw + 8), split ? bw * 2 + gap + 8 : bw + 8]]) {
-        ctx.fillStyle = 'rgba(16, 23, 32, 0.55)';
-        ctx.fillRect(x0, top, w, bottom - top);
-      }
-
-      // 列标题
+      // 顶部列头
       ctx.fillStyle = COL.label;
-      ctx.font = '9px ui-monospace, monospace';
+      ctx.font = `${g.narrow ? 8 : 9}px ui-monospace, monospace`;
       ctx.textAlign = 'left';
-      ctx.fillText(split ? 'C 呼梯' : '▼ 呼梯', 8, top - 6);
+      ctx.fillText(split ? 'C 呼梯' : '▼ 呼梯', 6, g.yRowTop(g.floors) - 6);
       ctx.textAlign = 'right';
-      ctx.fillText(split ? 'D 呼梯' : '▲ 呼梯', g.W - 8, top - 6);
+      ctx.fillText(split ? 'D 呼梯' : '▲ 呼梯', g.W - 6, g.yRowTop(g.floors) - 6);
       ctx.textAlign = 'left';
 
       for (let f = 1; f <= g.floors; f++) {
-        const dim = fog && focusFloor !== f;      // 别的楼层：只画灰按钮，不显示呼叫灯、也不能点
+        const dim = fog && focusFloor !== f;      // 别的楼层：灰按钮，不显示呼叫灯、也不能点
         const y = g.yFloor(f) - bh / 2;
         const list = split
           ? [
               { x: leftX, dir: -1, carId: 'C' },
-              { x: leftX + bw + gap, dir: 1, carId: 'C' },
-              { x: rightX - bw - gap, dir: -1, carId: 'D' },
-              { x: rightX, dir: 1, carId: 'D' }
+              { x: leftX + bw + g.btnGap, dir: 1, carId: 'C' },
+              { x: rightX, dir: -1, carId: 'D' },
+              { x: rightX + bw + g.btnGap, dir: 1, carId: 'D' }
             ]
           : [
               { x: leftX, dir: -1, carId: null },
-              { x: rightX, dir: 1, carId: null }
+              { x: rightX + bw + g.btnGap, dir: 1, carId: null }
             ];
         for (const b of list) {
           const lit = !dim && world.hallCalls.some((c) => c.floor === f && c.dir === b.dir
             && (c.carId || null) === (b.carId || null));
-          ctx.globalAlpha = dim ? 0.28 : active(f) ? 1 : 0.55;
+          ctx.globalAlpha = dim ? 0.25 : active(f) ? 1 : 0.6;
           ctx.fillStyle = lit ? COL.call : '#243244';
           ctx.fillRect(b.x, y, bw, bh);
-          ctx.strokeStyle = lit ? '#d6efff' : '#5b7288';
+          ctx.strokeStyle = lit ? '#d6efff' : '#4d6378';
           ctx.lineWidth = 1;
           ctx.strokeRect(b.x + 0.5, y + 0.5, bw - 1, bh - 1);
           ctx.fillStyle = lit ? '#0d1117' : '#a9d8ff';
-          ctx.font = '10px ui-monospace, monospace';
+          ctx.font = `${g.narrow ? 8 : 10}px ui-monospace, monospace`;
           ctx.textAlign = 'center';
-          ctx.fillText(b.dir > 0 ? '▲' : '▼', b.x + bw / 2, y + 12);
+          ctx.fillText(b.dir > 0 ? '▲' : '▼', b.x + bw / 2, y + bh - 4);
           ctx.textAlign = 'left';
           ctx.globalAlpha = 1;
           if (!dim) this.hallHits.push({ x: b.x, y, w: bw, h: bh, floor: f, dir: b.dir, carId: b.carId });
@@ -358,10 +362,13 @@
       const ctx = this.ctx;
       const floors = world.cfg.floors;
       const half = Math.ceil(floors / 2);
-      const bw = 34, bh = 20, gap = 6;
+      // 窄屏（手机）：楼层键缩小，开门/关门交给底部触屏栏，面板不再塞第三列
+      const narrow = !!g.narrow;
+      const bw = narrow ? 26 : 34, bh = narrow ? 17 : 20, gap = narrow ? 4 : 6;
+      const showDoors = !narrow;
       const cols = [
-        { x: 8, from: 1, to: half, doorX: 8 + bw + 8 },
-        { x: g.W - 8 - bw, from: half + 1, to: floors, doorX: g.W - 8 - bw - 8 - bw }
+        { x: 6, from: 1, to: half, doorX: 6 + bw + 8 },
+        { x: g.W - 6 - bw, from: half + 1, to: floors, doorX: g.W - 6 - bw - 8 - bw }
       ];
       // 面板底
       for (const col of cols) {
@@ -378,7 +385,8 @@
         ctx.fillText(car.id + ' 梯', col.x + bw / 2, y0 + 8);
         ctx.textAlign = 'left';
 
-        // 开门 / 关门：单独一列，和楼层键错开
+        // 开门 / 关门：单独一列，和楼层键错开（窄屏用底部触屏栏，不画）
+        if (showDoors) {
         const dy0 = y0 + panelH / 2 - 26;
         ctx.fillStyle = 'rgba(16, 23, 32, 0.92)';
         ctx.fillRect(col.doorX - 5, dy0 - 18, bw + 10, 62);
@@ -401,6 +409,7 @@
           ctx.fillText(d.label, col.doorX + bw / 2, d.y + 14);
           ctx.textAlign = 'left';
           this.carHits.push({ x: col.doorX, y: d.y, w: bw, h: bh, door: d.action });
+        }
         }
 
         for (let f = col.to; f >= col.from; f--) {
