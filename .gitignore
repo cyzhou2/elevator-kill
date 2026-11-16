@@ -1,0 +1,13 @@
+# 依赖 / 构建产物
+node_modules/
+dist/
+
+# 本地调试产物
+.playwright-mcp/
+*.log
+tmp_*.js
+tmp_*.png
+
+# 系统文件
+.DS_Store
+Thumbs.db
