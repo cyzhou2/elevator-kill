@@ -320,7 +320,7 @@
       ctx.textAlign = 'left';
 
       for (let f = 1; f <= g.floors; f++) {
-        if (fog && focusFloor !== f) continue;
+        const dim = fog && focusFloor !== f;      // 别的楼层：只画灰按钮，不显示呼叫灯、也不能点
         const y = g.yFloor(f) - bh / 2;
         const list = split
           ? [
@@ -334,9 +334,9 @@
               { x: rightX, dir: 1, carId: null }
             ];
         for (const b of list) {
-          const lit = world.hallCalls.some((c) => c.floor === f && c.dir === b.dir
+          const lit = !dim && world.hallCalls.some((c) => c.floor === f && c.dir === b.dir
             && (c.carId || null) === (b.carId || null));
-          ctx.globalAlpha = active(f) ? 1 : 0.55;
+          ctx.globalAlpha = dim ? 0.28 : active(f) ? 1 : 0.55;
           ctx.fillStyle = lit ? COL.call : '#243244';
           ctx.fillRect(b.x, y, bw, bh);
           ctx.strokeStyle = lit ? '#d6efff' : '#5b7288';
@@ -348,7 +348,7 @@
           ctx.fillText(b.dir > 0 ? '▲' : '▼', b.x + bw / 2, y + 12);
           ctx.textAlign = 'left';
           ctx.globalAlpha = 1;
-          this.hallHits.push({ x: b.x, y, w: bw, h: bh, floor: f, dir: b.dir, carId: b.carId });
+          if (!dim) this.hallHits.push({ x: b.x, y, w: bw, h: bh, floor: f, dir: b.dir, carId: b.carId });
         }
       }
     }
