@@ -13,7 +13,7 @@
     roundSeconds: 180,
 
     // 每层布局：楼梯口A — 左楼道 — 电梯厅 — 右楼道 — 楼梯口B
-    corridorSideM: 1,       // 左/右楼道长度（两边相等）
+    corridorSideM: 1.0,       // 左/右楼道长度（两边相等）
     lobbyWidthM: 3.6,       // 电梯厅宽度
     landingInsetM: 0.7,     // 楼梯口离楼层两端的距离
 
