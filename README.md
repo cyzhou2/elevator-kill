@@ -3,6 +3,8 @@
 二维网页模拟游戏：20 层公寓、2 部电梯、2 部楼梯，3 个小孩靠拖时间得分，2 个杀人犯靠共享频道围猎。
 纯原生 JS，**双击 `index.html` 就能玩**，不需要安装、不需要构建、不需要服务器。
 
+在线地址：**https://cyzhou2.github.io/elevator-kill/**（GitHub Pages，push 到 main 自动发布）
+
 ![游戏截图](docs/screenshot.png)
 
 进入游戏会先弹一页可跳过的简介 / 教程（左上角 `?` 随时重看）：
