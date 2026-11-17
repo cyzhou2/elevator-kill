@@ -4,7 +4,7 @@
 (function () {
   const EK = (globalThis.EK = globalThis.EK || {});
 
-  EK.VERSION = 'v8';
+  EK.VERSION = 'v8.1';
 
   const DEFAULTS = {
     floors: 20,
@@ -19,7 +19,7 @@
 
     // 角色：走廊速度 / 爬楼速度（层每秒）/ 视距
     kid:    { speed: 2.2,  stairSpeed: 0.22, vision: 14, dangerM: 9, reactionSec: 0.2 },
-    killer: { speed: 2.6,  stairSpeed: 0.26, vision: 14 },
+    killer: { speed: 2.3,  stairSpeed: 0.23, vision: 14 },
 
     elevator: {
       cars: 2,
