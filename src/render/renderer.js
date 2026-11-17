@@ -103,8 +103,10 @@
       }
       for (const a of shown) this.drawActor(world, a, g, true);
 
-      if (focus && focus.location.type === 'car') {
-        this.drawCarPanel(world, world.elev.get(focus.location.carId), focus, g);
+      // 开/关门面板：人在轿厢里，或者旁观者（可以远程操作）时才显示
+      const inCarNow = focus && focus.location.type === 'car';
+      if (inCarNow || (world.freePlay && world.freePlay())) {
+        this.drawCarPanel(world, inCarNow ? world.elev.get(focus.location.carId) : null, focus, g);
       }
 
       this.drawFrame(g);
@@ -113,7 +115,7 @@
     hitTest(mx, my) {
       for (const b of this.carHits) {
         if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
-          return b.door ? { type: 'carDoor', action: b.door } : { type: 'car', floor: b.floor };
+          return b.door ? { type: 'carDoor', action: b.door, carId: b.carId } : { type: 'car', floor: b.floor, carId: b.carId };
         }
       }
       for (const b of this.carBtnHits) {
@@ -313,11 +315,20 @@
       const focusFloor = focus && focus.location.type === 'floor' ? focus.location.floor : null;
       const active = (f) => !fog && (!focus || focusFloor === f);
 
-      // 轿厢按键框：只有「看得到电梯状态」的时候才画（上帝视角 / 在轿厢里 / 杀人犯共享视野）
+      // 轿厢按键框：每一部梯单独判断「看不看得到它的面板」
       const focusK = focus && focus.kind === 'killer';
       const inCar = focus && focus.location.type === 'car';
-      const showFrames = !fog || inCar || focusK;
       const myCar = inCar ? focus.location.carId : null;
+      const sideVisible = (side) => {
+        if (!fog) return true;                                  // 上帝视角：全知
+        if (world.freePlay && world.freePlay()) return true;     // 旁观者
+        if (inCar) return myCar === side;                       // 只有自己这一部
+        if (focusK) {
+          // 杀人犯共享视野：队里有谁在那部梯里，就能看到那部的面板
+          return world.killersAlive().some((k) => k.location.type === 'car' && k.location.carId === side);
+        }
+        return false;                                           // 小孩在外面：看不到任何轿厢面板
+      };
 
       for (let f = 1; f <= g.floors; f++) {
         const dim = fog && !inCar && focusFloor !== f;
@@ -359,28 +370,26 @@
           if (!dim) this.hallHits.push({ x, y: by, w: bw, h: bh, floor: f, dir: sp.dir, carId: sp.carId });
         }
 
-        // —— 楼层标识 + 轿厢按键框（左 = C 梯，右 = D 梯）——
-        if (!showFrames) {
-          // 看不到电梯状态：只画纯楼层号
-          const isMajor = f % 5 === 0;
-          ctx.fillStyle = dim ? '#4a5a6c' : isMajor ? COL.floorMajor : COL.floorLabel;
-          ctx.font = `bold ${g.narrow ? 9 : 11}px ui-monospace, monospace`;
-          ctx.textAlign = 'right';
-          ctx.fillText(`${f}F`, g.labelRight, y + 4);
-          ctx.textAlign = 'left';
-          ctx.fillText(`${f}F`, g.W - g.labelRight, y + 4);
-          ctx.textAlign = 'left';
-          continue;
-        }
+        // —— 楼层标识 + 轿厢按键框（左 = C 梯，右 = D 梯；两边独立判断可不可见）——
+        const fw = g.narrow ? 24 : 30, fh = g.narrow ? 12 : 15;
         for (const side of ['C', 'D']) {
           const car = world.elev.get(side);
           if (!car) continue;
-          const pressed = car.carCalls.has(f);
-          const here = Math.abs(car.floor - f) < 0.05 && car.doorsOpen;
-          const fw = g.narrow ? 24 : 30, fh = g.narrow ? 12 : 15;
           const fx = side === 'C' ? (g.labelRight - fw + 2) : (g.W - g.labelRight - 2);
           const fy = y - fh / 2;
-          // 框：没按就是背景色（只有细边），按下变高亮，到层/取消自动弹起
+          if (!sideVisible(side)) {
+            // 看不到这部梯的面板：只画纯楼层号（没有框）
+            const isMajor = f % 5 === 0;
+            ctx.fillStyle = dim ? '#3f4d5c' : isMajor ? COL.floorMajor : COL.floorLabel;
+            ctx.font = `bold ${g.narrow ? 9 : 11}px ui-monospace, monospace`;
+            ctx.textAlign = side === 'C' ? 'right' : 'left';
+            ctx.fillText(`${f}F`, side === 'C' ? g.labelRight : g.W - g.labelRight, y + 4);
+            ctx.textAlign = 'left';
+            continue;
+          }
+          const pressed = car.carCalls.has(f);
+          const here = Math.abs(car.floor - f) < 0.05 && car.doorsOpen;
+          // 框：没按 = 暗框（背景色 + 细边），按下 = 高亮，到层/取消自动弹起
           ctx.globalAlpha = dim ? 0.3 : 1;
           ctx.fillStyle = pressed ? COL.call : 'rgba(13,17,23,0.6)';
           ctx.fillRect(fx, fy, fw, fh);
@@ -403,34 +412,40 @@
       const focusCar = this.focusCarId || null;
       return focusCar === carId;
     }
-    /** 进了轿厢才出现：开门 / 关门（现代电梯符号：尖角朝内=关门，朝外=开门，中间一条竖线） */
+    /** 开/关门：左边一组给 C 梯，右边一组给 D 梯，各自独立 */
     drawCarPanel(world, car, focus, g) {
       if (g.narrow) return;                       // 手机用底部触控栏
       const ctx = this.ctx;
       const bw = 44, bh = 26, gap = 6;
-      const x = 40;
-      // 按楼层对齐：开门键在 10F 那一行，关门键在 9F 那一行
-      const y = g.yFloor(Math.min(10, g.floors)) - bh / 2;
-      const doors = [
-        { icon: 'open', enabled: car.canOpen(), y },
-        { icon: 'close', enabled: car.canClose(), y: y + bh + gap }
+      const y10 = g.yFloor(Math.min(10, g.floors)) - bh / 2;   // 开门键对齐 10F，关门键对齐 9F
+      const panelH = 2 * bh + gap + 4;
+      const sides = [
+        { id: 'C', x: 40 },
+        { id: 'D', x: g.W - 40 - bw }
       ];
-      const totalH = doors.length * (bh + gap) + 4;
-      ctx.fillStyle = 'rgba(16, 23, 32, 0.92)';
-      ctx.fillRect(x - 5, y - 5, bw + 10, totalH);
-      ctx.strokeStyle = '#26323f';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x - 5, y - 5, bw + 10, totalH);
-      for (const d of doors) {
-        ctx.fillStyle = d.enabled ? '#20303f' : '#151d26';
-        ctx.fillRect(x, d.y, bw, bh);
-        ctx.strokeStyle = d.enabled ? '#5b7288' : '#2a3644';
-        ctx.strokeRect(x + 0.5, d.y + 0.5, bw - 1, bh - 1);
-        this.drawDoorIcon(x, d.y, bw, bh, d.icon, d.enabled ? '#cfe6ff' : '#44556a');
-        this.carHits.push({ x, y: d.y, w: bw, h: bh, door: d.icon });
+      for (const side of sides) {
+        const c = world.elev.get(side.id);
+        if (!c) continue;
+        const operable = this.canPressCarButton(world, side.id);
+        const doors = [
+          { icon: 'open', enabled: operable && c.canOpen(), y: y10 },
+          { icon: 'close', enabled: operable && c.canClose(), y: y10 + bh + gap }
+        ];
+        ctx.fillStyle = 'rgba(16, 23, 32, 0.92)';
+        ctx.fillRect(side.x - 5, y10 - 5, bw + 10, panelH);
+        ctx.strokeStyle = '#26323f';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(side.x - 5, y10 - 5, bw + 10, panelH);
+        for (const d of doors) {
+          ctx.fillStyle = d.enabled ? '#20303f' : '#151d26';
+          ctx.fillRect(side.x, d.y, bw, bh);
+          ctx.strokeStyle = d.enabled ? '#5b7288' : '#2a3644';
+          ctx.strokeRect(side.x + 0.5, d.y + 0.5, bw - 1, bh - 1);
+          this.drawDoorIcon(side.x, d.y, bw, bh, d.icon, d.enabled ? '#cfe6ff' : '#44556a');
+          this.carHits.push({ x: side.x, y: d.y, w: bw, h: bh, door: d.icon, carId: side.id });
+        }
       }
     }
-
     /** 电梯门符号：中间一条细竖线，两侧各一个正三角形 */
     drawDoorIcon(x, y, w, h, kind, color) {
       const ctx = this.ctx;

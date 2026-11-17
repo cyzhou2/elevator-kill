@@ -200,7 +200,9 @@
     }
     if (hit.type === 'car') world.toggleCarCall(human, hit.floor);
     else if (hit.type === 'carDoor') {
-      const car = human.location.type === 'car' ? world.elev.get(human.location.carId) : null;
+      const carId = hit.carId;
+      if (!world.canPressCarButton(carId)) { world.log(`只有身处 ${carId} 梯里才能按它的开/关门键`, 'you', hit.floor); return; }
+      const car = world.elev.get(carId);
       if (car) { if (hit.action === 'open') car.requestOpen(); else car.requestClose(); }
     } else if (hit.type === 'hall') {
       const ok = world.humanPressHall(human, hit.floor, hit.dir, hit.carId);

@@ -89,7 +89,7 @@
       if (a.carTargetFloor != null) return;
       const f = safeFloor(world, a);
       a.carTargetFloor = f;
-      car.requestFloor(f);
+      world.pressCarFloor(a, car, f);
     }
   };
 
@@ -222,7 +222,7 @@
       const want = tgt ? tgt.floor : (a.patrolFloor != null ? a.patrolFloor : a.carTargetFloor);
       if (want != null) {
         a.carTargetFloor = want;
-        car.requestFloor(want);
+        world.pressCarFloor(a, car, want);
       }
       if (car.doorsOpen && a.carTargetFloor === Math.round(car.floor)) {
         world.exitCar(a, car);

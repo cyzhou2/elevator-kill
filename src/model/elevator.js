@@ -118,11 +118,12 @@
       return list;
     }
 
-    /** 还在等电梯的楼层里，离本层最近的那个（无视派单，闲置时立刻去） */
+    /** 最近的任务层：轿厢里按下的楼层，或还没被响应的呼梯（闲置时据此立刻出发） */
     nearestCall() {
       let best = null;
       for (let f = 1; f <= this.world.cfg.floors; f++) {
-        if (!this.callsFor(f).length) continue;
+        const has = this.carCalls.has(f) || this.callsFor(f).length > 0;
+        if (!has) continue;
         if (best === null || Math.abs(f - this.floor) < Math.abs(best - this.floor)) best = f;
       }
       return best;

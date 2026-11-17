@@ -183,6 +183,7 @@
       a.moveTarget = null;
       a.nav = a.nav ? Object.assign({}, a.nav, { phase: 'ride', carId: car.id }) : null;
       a.log = true;
+      this.log(`${a.name} 进了 ${car.id} 梯（${Math.round(car.floor)}F）`, a.controlled ? 'you' : 'move', car.floor);
     }
 
     exitCar(a, car) {
@@ -194,6 +195,7 @@
       car.extendHold();
       a.carTargetFloor = null;
       if (a.nav) a.nav = null;
+      this.log(`${a.name} 出了 ${car.id} 梯（${Math.round(car.floor)}F）`, a.controlled ? 'you' : 'move', car.floor);
     }
 
     carTick(a, dt) {
@@ -232,7 +234,6 @@
           if (Math.abs(a.location.x - this.carDoorX(car.id)) > this.cfg.elevator.boardRangeM) continue;
           if (a.kind === 'kid' && this.killersInCar(car).length > 0) { a.boardRequest = false; break; }
           this.enterCar(a, car);
-          this.log(`${a.name} 进了 ${car.id} 梯（${car.floor}F）`, 'move', car.floor);
           break;
         }
       }
@@ -245,7 +246,6 @@
           const t = a.carTargetFloor;
           if (car.doorsOpen && t != null && Math.abs(car.floor - t) < 0.05) {
             this.exitCar(a, car);
-            this.log(`${a.name} 在 ${car.floor}F 出了 ${car.id} 梯`, 'move', car.floor);
           } else if (a.kind === 'kid' && car.doorsOpen && this.killersInCar(car).length > 0) {
             this.exitCar(a, car);
           }
@@ -498,9 +498,10 @@
         if (!this.canPressHall(a)) return false;
       }
       const own = carId || null;
-      this.elev.press(floor, dir, own);
+      const fresh = this.elev.press(floor, dir, own);
       const label = dir > 0 ? '▲' : '▼';
-      this.log(`你按了 ${own ? own + '梯 ' : ''}${floor}F ${label} 呼梯`, 'you', floor);
+      // 同一层同一方向已经按过：只表示「等得着急」，不重复记事件
+      if (fresh) this.log(`你按了 ${own ? own + '梯 ' : ''}${floor}F ${label} 呼梯`, 'you', floor);
       return true;
     }
 
@@ -517,11 +518,19 @@
       if (!car) return false;
       if (car.carCalls.has(floor)) {
         car.carCalls.delete(floor);
-        this.log(`取消了 ${carId} 梯 ${floor}F`, 'you', floor);
+        this.log(`你在 ${carId} 梯里取消了 ${floor}F`, 'you', floor);
       } else {
         car.carCalls.add(floor);
-        this.log(`按了 ${carId} 梯 ${floor}F`, 'you', floor);
+        this.log(`你在 ${carId} 梯里按了 ${floor}F`, 'you', floor);
       }
+      return true;
+    }
+
+    /** AI 在轿厢里按楼层：只在新登记时记事件，重复按不刷屏 */
+    pressCarFloor(a, car, floor) {
+      if (car.carCalls.has(floor)) { car.requestFloor(floor); return false; }
+      car.requestFloor(floor);
+      this.log(`${a.name} 在 ${car.id} 梯里按了 ${floor}F`, 'move', car.floor);
       return true;
     }
 
