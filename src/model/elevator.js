@@ -177,26 +177,30 @@
           this.openDoors(at);
           return;
         }
-        // 只剩反方向呼梯：原地补开一次，把两个方向一起清掉（每次停靠只补一次，避免反复开门）
-        if (calls.length && this.dir !== 0 && !this.reopenedForOpposite) {
-          this.reopenedForOpposite = true;
-          this.serveDir = 0;
-          this.state = 'opening';
-          this.timer = 0;
-          this.doorsOpen = false;
-          this.reopenCount = 0;
-          this.world.onCarOpening(this, at);
-          return;
-        }
       }
 
-      // 2. 正方向队列还没跑完 → 继续走（队列每帧重算，「延长线」上有新任务会自动续上）
+      // 2. 正方向队列还没跑完 → 继续走（哪怕本层还留着反方向呼梯，也不为它停下来补开门；
+      //    「延长线」上有新任务会自动续上）
       if (this.dir !== 0 && this.aheadStops(this.dir).length) {
         this.state = 'moving';
         return;
       }
 
-      // 3. 正方向空了，反方向有任务 → 立即掉头
+      // 3. 这个方向真的跑完了，本层还留着反方向呼梯 → 原地补开一次，把两个方向一起清掉
+      //    （每次停靠只补一次，避免反复开门）
+      if (here && this.dir !== 0 && !this.reopenedForOpposite
+          && this.callsFor(at).length) {
+        this.reopenedForOpposite = true;
+        this.serveDir = 0;
+        this.state = 'opening';
+        this.timer = 0;
+        this.doorsOpen = false;
+        this.reopenCount = 0;
+        this.world.onCarOpening(this, at);
+        return;
+      }
+
+      // 4. 正方向空了，反方向有任务 → 立即掉头
       if (this.dir !== 0 && this.aheadStops(-this.dir).length) {
         this.dir = -this.dir;
         this.state = 'moving';
