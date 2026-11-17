@@ -20,6 +20,7 @@
       this.geo = null;
       this.hallHits = [];
       this.carHits = [];
+      this.carBtnHits = [];
       this.trails = new Map();
     }
 
@@ -59,6 +60,8 @@
       const fog = view === 'fog' && !!focus;
       this.hallHits = [];
       this.carHits = [];
+      this.carBtnHits = [];
+      this.focusCarId = focus && focus.location && focus.location.type === 'car' ? focus.location.carId : null;
 
       ctx.clearRect(0, 0, g.W, g.H);
       ctx.fillStyle = COL.bg;
@@ -84,8 +87,7 @@
 
       // 呼梯按钮：画布最左 = C 的一组，最右 = D 的一组，按楼层对齐；
       // 人在轿厢里时这两列换成选层面板
-      const inCar = focus && focus.location.type === 'car';
-      if (!inCar) this.drawHallButtons(world, g, fog, focus);
+      this.drawHallButtons(world, g, fog, focus);
 
       // 角色：先画拖尾再画点（有限视角下看不见的人不画，避免泄露位置）
       const shown = [];
@@ -112,6 +114,11 @@
       for (const b of this.carHits) {
         if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
           return b.door ? { type: 'carDoor', action: b.door } : { type: 'car', floor: b.floor };
+        }
+      }
+      for (const b of this.carBtnHits) {
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+          return { type: 'carBtn', floor: b.floor, carId: b.carId };
         }
       }
       for (const b of this.hallHits) {
@@ -179,14 +186,7 @@
         ctx.textAlign = 'left';
       }
 
-      // 1–20F 楼层标记：两边都标，加粗、按 5 层一档加深，扫一眼就能对上按钮
-      const isMajor = f % 5 === 0;
-      ctx.fillStyle = isMajor ? COL.floorMajor : COL.floorLabel;
-      ctx.font = `bold ${g.narrow ? 9 : 11}px ui-monospace, monospace`;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${f}F`, g.labelRight, y + 4);
-      ctx.textAlign = 'left';
-      ctx.fillText(`${f}F`, g.W - g.labelRight, y + 4);
+      // 楼层标识挪到 drawHallButtons 里画（要带轿厢按键框）
     }
 
     drawStairShaft(landing, x, g) {
@@ -304,134 +304,166 @@
       return world.hallButtonSpecs();
     }
 
-    /** 每层那一条横线的左右两头：左端 C 的 ▼▲，右端 D 的 ▼▲，跟着楼层行走 */
+    /** 呼梯按钮：回到 v4 的位置——C 的贴在电梯厅左边、D 的贴在右边；楼层标识两端加「轿厢按键框」 */
     drawHallButtons(world, g, fog, focus) {
       const ctx = this.ctx;
+      const b = world.building;
       const split = world.cfg.elevator.hallButtons === 'split';
-      const bw = g.btnW, bh = g.btnH;
+      const bw = g.narrow ? 14 : 18, bh = g.narrow ? 11 : 14;
       const focusFloor = focus && focus.location.type === 'floor' ? focus.location.floor : null;
-      const leftX = g.groupX;
-      const rightX = g.W - g.groupX - g.groupW;
       const active = (f) => !fog && (!focus || focusFloor === f);
 
-      // 顶部列头
-      ctx.fillStyle = COL.label;
-      ctx.font = `${g.narrow ? 8 : 9}px ui-monospace, monospace`;
-      ctx.textAlign = 'left';
-      ctx.fillText(split ? 'C 呼梯' : '▼ 呼梯', 6, g.yRowTop(g.floors) - 6);
-      ctx.textAlign = 'right';
-      ctx.fillText(split ? 'D 呼梯' : '▲ 呼梯', g.W - 6, g.yRowTop(g.floors) - 6);
-      ctx.textAlign = 'left';
+      // 轿厢按键框：只有「看得到电梯状态」的时候才画（上帝视角 / 在轿厢里 / 杀人犯共享视野）
+      const focusK = focus && focus.kind === 'killer';
+      const inCar = focus && focus.location.type === 'car';
+      const showFrames = !fog || inCar || focusK;
+      const myCar = inCar ? focus.location.carId : null;
 
       for (let f = 1; f <= g.floors; f++) {
-        const dim = fog && focusFloor !== f;      // 别的楼层：灰按钮，不显示呼叫灯、也不能点
-        const y = g.yFloor(f) - bh / 2;
-        const list = split
+        const dim = fog && !inCar && focusFloor !== f;
+        const y = g.yFloor(f);
+        const by = y - bh / 2;
+
+        // —— 呼梯按钮（墙上的，C 左 D 右）——
+        // 有限视角：只看得见自己所在那层的按钮；在轿厢里看不见墙上的按钮
+        const hallVisible = !fog || (!inCar && focusFloor === f);
+        const specs = split
           ? [
-              { x: leftX, dir: -1, carId: 'C' },
-              { x: leftX + bw + g.btnGap, dir: 1, carId: 'C' },
-              { x: rightX, dir: -1, carId: 'D' },
-              { x: rightX + bw + g.btnGap, dir: 1, carId: 'D' }
+              { x: b.lobbyStart - 0.85, dir: -1, carId: 'C' },
+              { x: b.lobbyStart - 0.2, dir: 1, carId: 'C' },
+              { x: b.lobbyEnd + 0.2, dir: -1, carId: 'D' },
+              { x: b.lobbyEnd + 0.85, dir: 1, carId: 'D' }
             ]
           : [
-              { x: leftX, dir: -1, carId: null },
-              { x: rightX + bw + g.btnGap, dir: 1, carId: null }
+              { x: b.lobbyStart - 0.55, dir: -1, carId: null },
+              { x: b.lobbyEnd + 0.55, dir: 1, carId: null }
             ];
-        for (const b of list) {
-          const lit = !dim && world.hallCalls.some((c) => c.floor === f && c.dir === b.dir
-            && (c.carId || null) === (b.carId || null));
-          ctx.globalAlpha = dim ? 0.25 : active(f) ? 1 : 0.6;
+        for (const sp of specs) {
+          if (!hallVisible) break;
+          const cx = g.xM(sp.x);
+          const x = cx - bw / 2;
+          const lit = !dim && world.hallCalls.some((c) => c.floor === f && c.dir === sp.dir
+            && (c.carId || null) === (sp.carId || null));
+          ctx.globalAlpha = dim ? 0.25 : active(f) ? 1 : 0.65;
           ctx.fillStyle = lit ? COL.call : '#243244';
-          ctx.fillRect(b.x, y, bw, bh);
+          ctx.fillRect(x, by, bw, bh);
           ctx.strokeStyle = lit ? '#d6efff' : '#4d6378';
           ctx.lineWidth = 1;
-          ctx.strokeRect(b.x + 0.5, y + 0.5, bw - 1, bh - 1);
+          ctx.strokeRect(x + 0.5, by + 0.5, bw - 1, bh - 1);
           ctx.fillStyle = lit ? '#0d1117' : '#a9d8ff';
-          ctx.font = `${g.narrow ? 8 : 10}px ui-monospace, monospace`;
+          ctx.font = `${g.narrow ? 7 : 9}px ui-monospace, monospace`;
           ctx.textAlign = 'center';
-          ctx.fillText(b.dir > 0 ? '▲' : '▼', b.x + bw / 2, y + bh - 4);
+          ctx.fillText(sp.dir > 0 ? '▲' : '▼', x + bw / 2, by + bh - 4);
           ctx.textAlign = 'left';
           ctx.globalAlpha = 1;
-          if (!dim) this.hallHits.push({ x: b.x, y, w: bw, h: bh, floor: f, dir: b.dir, carId: b.carId });
+          if (!dim) this.hallHits.push({ x, y: by, w: bw, h: bh, floor: f, dir: sp.dir, carId: sp.carId });
         }
-      }
-    }
 
-    /** 进了轿厢才出现：左右两侧的楼层按钮 + 另一列开门/关门，可多选、再点取消 */
-    drawCarPanel(world, car, focus, g) {
-      const ctx = this.ctx;
-      const floors = world.cfg.floors;
-      const half = Math.ceil(floors / 2);
-      // 窄屏（手机）：楼层键缩小，开门/关门交给底部触屏栏，面板不再塞第三列
-      const narrow = !!g.narrow;
-      const bw = narrow ? 26 : 34, bh = narrow ? 17 : 20, gap = narrow ? 4 : 6;
-      const showDoors = !narrow;
-      const cols = [
-        { x: 6, from: 1, to: half, doorX: 6 + bw + 8 },
-        { x: g.W - 6 - bw, from: half + 1, to: floors, doorX: g.W - 6 - bw - 8 - bw }
-      ];
-      // 面板底
-      for (const col of cols) {
-        const n = col.to - col.from + 1;
-        const panelH = n * (bh + gap) + 26;
-        const y0 = Math.max(6, (g.H - panelH) / 2);
-        ctx.fillStyle = 'rgba(16, 23, 32, 0.92)';
-        ctx.fillRect(col.x - 6, y0 - 6, bw + 12, panelH + 6);
-        ctx.strokeStyle = '#26323f';
-        ctx.strokeRect(col.x - 6, y0 - 6, bw + 12, panelH + 6);
-        ctx.fillStyle = COL.label;
-        ctx.font = '9px ui-monospace, monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(car.id + ' 梯', col.x + bw / 2, y0 + 8);
-        ctx.textAlign = 'left';
-
-        // 开门 / 关门：单独一列，和楼层键错开（窄屏用底部触屏栏，不画）
-        if (showDoors) {
-        const dy0 = y0 + panelH / 2 - 26;
-        ctx.fillStyle = 'rgba(16, 23, 32, 0.92)';
-        ctx.fillRect(col.doorX - 5, dy0 - 18, bw + 10, 62);
-        ctx.strokeStyle = '#26323f';
-        ctx.strokeRect(col.doorX - 5, dy0 - 18, bw + 10, 62);
-        const doors = [
-          { label: '开门', action: 'open', y: dy0 },
-          { label: '关门', action: 'close', y: dy0 + 26 }
-        ];
-        for (const d of doors) {
-          const enabled = d.action === 'open' ? car.doorsOpen : car.doorsOpen;
-          ctx.fillStyle = enabled ? '#20303f' : '#151d26';
-          ctx.fillRect(col.doorX, d.y, bw, bh);
-          ctx.strokeStyle = enabled ? '#5b7288' : '#2a3644';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(col.doorX + 0.5, d.y + 0.5, bw - 1, bh - 1);
-          ctx.fillStyle = enabled ? '#cfe6ff' : '#4c5d70';
-          ctx.font = '10px ui-monospace, monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(d.label, col.doorX + bw / 2, d.y + 14);
+        // —— 楼层标识 + 轿厢按键框（左 = C 梯，右 = D 梯）——
+        if (!showFrames) {
+          // 看不到电梯状态：只画纯楼层号
+          const isMajor = f % 5 === 0;
+          ctx.fillStyle = dim ? '#4a5a6c' : isMajor ? COL.floorMajor : COL.floorLabel;
+          ctx.font = `bold ${g.narrow ? 9 : 11}px ui-monospace, monospace`;
+          ctx.textAlign = 'right';
+          ctx.fillText(`${f}F`, g.labelRight, y + 4);
           ctx.textAlign = 'left';
-          this.carHits.push({ x: col.doorX, y: d.y, w: bw, h: bh, door: d.action });
+          ctx.fillText(`${f}F`, g.W - g.labelRight, y + 4);
+          ctx.textAlign = 'left';
+          continue;
         }
-        }
-
-        for (let f = col.to; f >= col.from; f--) {
-          const idx = col.to - f;
-          const y = y0 + 16 + idx * (bh + gap);
-          const lit = car.carCalls.has(f);
+        for (const side of ['C', 'D']) {
+          const car = world.elev.get(side);
+          if (!car) continue;
+          const pressed = car.carCalls.has(f);
           const here = Math.abs(car.floor - f) < 0.05 && car.doorsOpen;
-          ctx.fillStyle = lit ? COL.call : '#18222e';
-          ctx.fillRect(col.x, y, bw, bh);
-          ctx.strokeStyle = here ? COL.you : lit ? '#d6efff' : '#33434f';
-          ctx.lineWidth = here ? 1.6 : 1;
-          ctx.strokeRect(col.x + 0.5, y + 0.5, bw - 1, bh - 1);
-          ctx.fillStyle = lit ? '#0d1117' : '#9fb3c8';
-          ctx.font = '11px ui-monospace, monospace';
+          const fw = g.narrow ? 24 : 30, fh = g.narrow ? 12 : 15;
+          const fx = side === 'C' ? (g.labelRight - fw + 2) : (g.W - g.labelRight - 2);
+          const fy = y - fh / 2;
+          // 框：没按就是背景色（只有细边），按下变高亮，到层/取消自动弹起
+          ctx.globalAlpha = dim ? 0.3 : 1;
+          ctx.fillStyle = pressed ? COL.call : 'rgba(13,17,23,0.6)';
+          ctx.fillRect(fx, fy, fw, fh);
+          ctx.strokeStyle = pressed ? '#d6efff' : here ? COL.you : '#3a4a5c';
+          ctx.lineWidth = pressed ? 1.4 : 1;
+          ctx.strokeRect(fx + 0.5, fy + 0.5, fw - 1, fh - 1);
+          ctx.fillStyle = pressed ? '#0d1117' : COL.floorLabel;
+          ctx.font = `bold ${g.narrow ? 8 : 10}px ui-monospace, monospace`;
           ctx.textAlign = 'center';
-          ctx.fillText(String(f), col.x + bw / 2, y + 14);
+          ctx.fillText(`${f}F`, fx + fw / 2, fy + fh - (g.narrow ? 3 : 4));
           ctx.textAlign = 'left';
-          this.carHits.push({ x: col.x, y, w: bw, h: bh, floor: f });
+          ctx.globalAlpha = 1;
+          this.carBtnHits.push({ x: fx, y: fy, w: fw, h: fh, floor: f, carId: side, pressable: this.canPressCarButton(world, side) });
         }
       }
     }
 
+    canPressCarButton(world, carId) {
+      if (world.freePlay && world.freePlay()) return true;
+      const focusCar = this.focusCarId || null;
+      return focusCar === carId;
+    }
+    /** 进了轿厢才出现：开门 / 关门（现代电梯符号：尖角朝内=关门，朝外=开门，中间一条竖线） */
+    drawCarPanel(world, car, focus, g) {
+      if (g.narrow) return;                       // 手机用底部触控栏
+      const ctx = this.ctx;
+      const bw = 44, bh = 26, gap = 6;
+      const x = 40;
+      // 按楼层对齐：开门键在 10F 那一行，关门键在 9F 那一行
+      const y = g.yFloor(Math.min(10, g.floors)) - bh / 2;
+      const doors = [
+        { icon: 'open', enabled: car.canOpen(), y },
+        { icon: 'close', enabled: car.canClose(), y: y + bh + gap }
+      ];
+      const totalH = doors.length * (bh + gap) + 4;
+      ctx.fillStyle = 'rgba(16, 23, 32, 0.92)';
+      ctx.fillRect(x - 5, y - 5, bw + 10, totalH);
+      ctx.strokeStyle = '#26323f';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - 5, y - 5, bw + 10, totalH);
+      for (const d of doors) {
+        ctx.fillStyle = d.enabled ? '#20303f' : '#151d26';
+        ctx.fillRect(x, d.y, bw, bh);
+        ctx.strokeStyle = d.enabled ? '#5b7288' : '#2a3644';
+        ctx.strokeRect(x + 0.5, d.y + 0.5, bw - 1, bh - 1);
+        this.drawDoorIcon(x, d.y, bw, bh, d.icon, d.enabled ? '#cfe6ff' : '#44556a');
+        this.carHits.push({ x, y: d.y, w: bw, h: bh, door: d.icon });
+      }
+    }
+
+    /** 电梯门符号：中间一条细竖线，两侧各一个正三角形 */
+    drawDoorIcon(x, y, w, h, kind, color) {
+      const ctx = this.ctx;
+      const cx = x + w / 2, cy = y + h / 2;
+      const th = Math.min(h * 0.78, 18);
+      const tw = th * 0.5;
+      const gapHalf = 1.5;                        // 三角形顶点离中线的距离
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      // 中垂线
+      ctx.beginPath();
+      ctx.moveTo(cx + 0.5, cy - th / 2);
+      ctx.lineTo(cx + 0.5, cy + th / 2);
+      ctx.stroke();
+      // 三角形：dir = +1 表示顶点朝右
+      const tri = (apexX, dir) => {
+        const baseX = apexX - dir * tw;
+        ctx.beginPath();
+        ctx.moveTo(apexX, cy);
+        ctx.lineTo(baseX, cy - th / 2);
+        ctx.lineTo(baseX, cy + th / 2);
+        ctx.closePath();
+        ctx.fill();
+      };
+      if (kind === 'close') {
+        tri(cx - gapHalf, 1);          // 左边顶点朝右（朝内）
+        tri(cx + gapHalf, -1);         // 右边顶点朝左（朝内）
+      } else {
+        tri(cx - gapHalf - tw, -1);    // 左边顶点朝左（朝外）
+        tri(cx + gapHalf + tw, 1);     // 右边顶点朝右（朝外）
+      }
+    }
     drawActor(world, a, g, visible) {
       const ctx = this.ctx;
       const p = this.actorPoint(world, a, g);

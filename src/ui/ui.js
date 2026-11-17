@@ -217,13 +217,13 @@
       this.renderLog(world, human, settings.view === 'fog');
     },
 
-    /** 触屏上 ▲/▼ 两个小键：电梯厅里是呼梯，轿厢里变成开门/关门 */
+    /** 触屏上 ▲/▼ 两个小键：电梯厅里是呼梯，轿厢里变成开/关门（用电梯符号：尖角朝外=开门，朝内=关门） */
     renderTouch(human) {
       const q = $('tbQ'), e = $('tbE');
       if (!q || !e) return;
       const inCar = human && human.location.type === 'car';
-      q.textContent = inCar ? '关门' : '▼';
-      e.textContent = inCar ? '开门' : '▲';
+      q.innerHTML = inCar ? '<span class="dooricon">&#9654;<i></i>&#9664;</span>' : '▼';
+      e.innerHTML = inCar ? '<span class="dooricon">&#9664;<i></i>&#9654;</span>' : '▲';
     },
 
     renderYou(world, human) {

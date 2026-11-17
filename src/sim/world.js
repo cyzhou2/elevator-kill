@@ -486,14 +486,42 @@
       return near;
     }
 
+    /** 旁观者+上帝视角：可以替任何人按任何按钮 */
+    freePlay() {
+      return this.opts.mode === 'spectate' && this.opts.view === 'god';
+    }
+
     humanPressHall(a, floor, dir, carId) {
-      if (!a.alive || a.location.type !== 'floor') return false;
-      if (a.location.floor !== floor) return false;
-      if (!this.canPressHall(a)) return false;
+      if (!this.freePlay()) {
+        if (!a.alive || a.location.type !== 'floor') return false;
+        if (a.location.floor !== floor) return false;
+        if (!this.canPressHall(a)) return false;
+      }
       const own = carId || null;
       this.elev.press(floor, dir, own);
       const label = dir > 0 ? '▲' : '▼';
-      this.log(`你按了 ${own ? own + '梯 ' : ''}${label} 呼梯`, 'you', floor);
+      this.log(`你按了 ${own ? own + '梯 ' : ''}${floor}F ${label} 呼梯`, 'you', floor);
+      return true;
+    }
+
+    /** 轿厢内的楼层按键：只有身处那部梯里才能按；旁观者+上帝视角例外 */
+    canPressCarButton(carId) {
+      if (this.freePlay()) return true;
+      const a = this.actors.find((x) => x.controlled && x.alive);
+      return !!a && a.location.type === 'car' && a.location.carId === carId;
+    }
+
+    /** 登记 / 取消轿厢里某一层（点一下按、再点一下取消） */
+    toggleCarButton(carId, floor) {
+      const car = this.elev.get(carId);
+      if (!car) return false;
+      if (car.carCalls.has(floor)) {
+        car.carCalls.delete(floor);
+        this.log(`取消了 ${carId} 梯 ${floor}F`, 'you', floor);
+      } else {
+        car.carCalls.add(floor);
+        this.log(`按了 ${carId} 梯 ${floor}F`, 'you', floor);
+      }
       return true;
     }
 

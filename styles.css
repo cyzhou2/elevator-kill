@@ -254,3 +254,5 @@ kbd {
   #sidebar .grp { display: block; }
   .introCard { max-height: 88vh; }
 }
+.dooricon { display: inline-flex; align-items: center; gap: 1px; font-size: 12px; line-height: 1; }
+.dooricon i { display: block; width: 1px; height: 13px; background: currentColor; opacity: .8; }

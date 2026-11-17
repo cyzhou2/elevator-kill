@@ -18,6 +18,7 @@
       this.pressOpen = false;
       this.carCalls = new Set();
       this.claims = new Set();      // 已派给本梯的呼梯楼层
+      this.target = null;           // 正在赶去的呼梯楼层（方向队列之外的单点目标）
       this.passengers = new Set();
     }
 
@@ -33,9 +34,33 @@
       this.carCalls.add(f);
     }
 
-    requestOpen() { this.pressOpen = true; }
+    /**
+     * 开门键：
+     * - 门开着 → 刷新关门倒计时
+     * - 正在关门 → 立刻变回开门状态，并刷新倒计时
+     * - 闲置（门关着、停在整层）→ 直接把门打开
+     */
+    requestOpen() {
+      if (this.state === 'open') {
+        this.pressOpen = true;          // update() 里把计时器清零
+        this.timer = 0;
+        return true;
+      }
+      if (this.state === 'closing') {
+        this.state = 'opening';
+        this.timer = 0;
+        this.doorsOpen = false;
+        this.blocked = false;
+        return true;
+      }
+      if (this.state === 'idle' && Math.abs(this.floor - Math.round(this.floor)) < 0.05) {
+        this.openDoors(Math.round(this.floor));
+        return true;
+      }
+      return false;
+    }
 
-    /** 强制关门：还在开门保持阶段就直接进入关门 */
+    /** 关门键：门开着 → 立刻进入关门过程 */
     requestClose() {
       if (this.state !== 'open') return false;
       this.timer = 0;
@@ -45,6 +70,15 @@
       this.world.onDoorsClosing(this);
       return true;
     }
+
+    /** 开门键现在能不能按 */
+    canOpen() {
+      if (this.state === 'open' || this.state === 'closing') return true;
+      return this.state === 'idle' && Math.abs(this.floor - Math.round(this.floor)) < 0.05;
+    }
+
+    /** 关门键现在能不能按 */
+    canClose() { return this.state === 'open'; }
 
     /** 有人进出：延长开门保持 */
     extendHold() { if (this.state === 'open') this.timer = 0; }
@@ -57,39 +91,41 @@
       this.reopenCount = (this.reopenCount || 0) + 1;
     }
 
-    /** 该方向前方是否还有任务 */
-    farStop() {
-      let best = null;
-      for (const f of this.allStops()) {
-        if (this.dir === 0) continue;
-        if (this.dir > 0 ? f > this.floor + 1e-6 : f < this.floor - 1e-6) {
-          if (best === null || Math.abs(f - this.floor) < Math.abs(best - this.floor)) best = f;
-        }
-      }
-      return best;
-    }
-
-    allStops() {
-      const s = new Set(this.carCalls);
-      for (const f of this.claims) s.add(f);
-      return s;
-    }
-
     /** 本梯能响应的本层呼梯：公用按钮(null) 或 指定本梯的按钮 */
     callsFor(f) {
       return this.world.hallCallsAt(f).filter((c) => !c.carId || c.carId === this.id);
     }
 
-    shouldStopAt(f) {
+    /** 该楼层是否需要在「某个方向」停靠：轿厢指令、正在赶去的目标层，或同方向的呼梯 */
+    wantsStopAt(f, dir) {
       if (this.carCalls.has(f)) return true;
-      if (!this.claims.has(f)) return false;
+      if (this.target != null && Math.abs(f - this.target) < 0.05) return true;
       const calls = this.callsFor(f);
-      if (!calls.length) { this.claims.delete(f); return false; }   // 幽灵停靠，清掉
-      if (this.dir === 0) return true;
-      if (calls.some((c) => c.dir === this.dir)) return true;
-      // 等太久的反方向呼梯也停，别让人一直等不到（但已经停在这一层就不要再反复开门）
-      if (Math.abs(this.floor - f) > 0.05 && calls.some((c) => this.world.time - (c.t0 || 0) > 8)) return true;
-      return false;
+      if (!calls.length) return false;
+      if (dir === 0) return true;                       // 待机时任何呼梯都算
+      return calls.some((c) => c.dir === dir);          // 只顺路停：同方向
+    }
+
+    /** 当前方向上、从本层（含）开始还要停的楼层，按行进顺序排序 —— 这就是「事件队列」 */
+    queueFor(dir) {
+      if (dir === 0) return [];
+      const list = [];
+      for (let f = 1; f <= this.world.cfg.floors; f++) {
+        if (dir > 0 ? f < this.floor - 0.05 : f > this.floor + 0.05) continue;
+        if (this.wantsStopAt(f, dir)) list.push(f);
+      }
+      list.sort((a, b) => (dir > 0 ? a - b : b - a));
+      return list;
+    }
+
+    /** 还在等电梯的楼层里，离本层最近的那个（无视派单，闲置时立刻去） */
+    nearestCall() {
+      let best = null;
+      for (let f = 1; f <= this.world.cfg.floors; f++) {
+        if (!this.callsFor(f).length) continue;
+        if (best === null || Math.abs(f - this.floor) < Math.abs(best - this.floor)) best = f;
+      }
+      return best;
     }
 
     update(dt) {
@@ -129,18 +165,21 @@
 
     plan() {
       const at = Math.round(this.floor);
-      const atStop = this.shouldStopAt(at) && Math.abs(this.floor - at) < 0.05;
-      if (atStop) { this.openDoors(at); return; }
+      const here = Math.abs(this.floor - at) < 0.05;
 
-      // 这个方向已经跑完（前方没有任务），而本层还留着反方向的呼梯 → 原地再开一次门把它清掉
-      if (this.cfg.reopenForOpposite !== false
-          && this.dir !== 0 && !this.reopenedForOpposite
-          && Math.abs(this.floor - at) < 0.05 && !this.stopsAhead(this.dir)) {
-        const opp = this.callsFor(at).filter((c) => c.dir !== this.dir);
-        if (opp.length) {
+      // 1. 就在这一层：本层的「正方向事件」= 轿厢指令 + 同方向呼梯；反方向呼梯只补开一次门
+      if (here) {
+        const calls = this.callsFor(at);
+        const carHere = this.carCalls.has(at);
+        const sameDir = this.dir !== 0 && calls.some((c) => c.dir === this.dir);
+        if (carHere || sameDir || (this.dir === 0 && calls.length)) {
+          this.openDoors(at);
+          return;
+        }
+        // 只剩反方向呼梯：原地补开一次，把两个方向一起清掉（每次停靠只补一次，避免反复开门）
+        if (calls.length && this.dir !== 0 && !this.reopenedForOpposite) {
           this.reopenedForOpposite = true;
-          this.serveDir = 0;                       // 两个方向一起清
-          this.floor = at;
+          this.serveDir = 0;
           this.state = 'opening';
           this.timer = 0;
           this.doorsOpen = false;
@@ -150,36 +189,35 @@
         }
       }
 
-      const stops = this.allStops();
-      if (stops.size === 0) { this.dir = 0; return; }
-
-      // 保持方向；没有前方任务则反向；都没有就选最近
-      if (this.dir !== 0) {
-        if (this.stopsAhead(this.dir)) { this.state = 'moving'; return; }
-        if (this.stopsBehind(this.dir)) { this.dir = -this.dir; this.state = 'moving'; return; }
-        this.dir = 0;
+      // 2. 正方向队列还没跑完 → 继续走（队列每帧重算，「延长线」上有新任务会自动续上）
+      if (this.dir !== 0 && this.aheadStops(this.dir).length) {
+        this.state = 'moving';
+        return;
       }
-      let best = null;
-      for (const f of stops) {
-        if (best === null || Math.abs(f - this.floor) < Math.abs(best - this.floor)) best = f;
-      }
-      if (best === null) { this.dir = 0; return; }
-      this.dir = best > this.floor ? 1 : best < this.floor ? -1 : 1;
-      this.state = 'moving';
-    }
 
-    stopsAhead(dir) {
-      for (const f of this.allStops()) if (dir > 0 ? f > this.floor + 1e-6 : f < this.floor - 1e-6) return true;
-      // 前方还有未到但需停的呼梯（已派给本梯，方向一致）
-      for (const f of this.claims) {
-        if (dir > 0 ? f > this.floor + 1e-6 : f < this.floor - 1e-6) return true;
+      // 3. 正方向空了，反方向有任务 → 立即掉头
+      if (this.dir !== 0 && this.aheadStops(-this.dir).length) {
+        this.dir = -this.dir;
+        this.state = 'moving';
+        return;
       }
-      return false;
-    }
 
-    stopsBehind(dir) {
-      for (const f of this.allStops()) if (dir > 0 ? f < this.floor - 1e-6 : f > this.floor + 1e-6) return true;
-      return false;
+      // 4. 正反都没任务：只要还有没被处理的呼梯，立刻去最近的那层（待机不摸鱼）
+      const target = this.nearestCall();
+      if (target != null) {
+        if (Math.abs(target - this.floor) < 0.05) { this.openDoors(at); return; }
+        this.target = target;
+        this.dir = target > this.floor ? 1 : -1;
+        this.state = 'moving';
+        return;
+      }
+
+      // 5. 真的没事：原地待机；不在整层就沿当前方向挪到最近的整层
+      this.dir = 0;
+      if (!here) {
+        this.settleDir = this.dir || 1;
+        this.state = 'moving';
+      }
     }
 
     openDoors(f) {
@@ -188,12 +226,50 @@
       this.timer = 0;
       this.doorsOpen = false;
       this.reopenCount = 0;
+      this.reopenedForOpposite = false;   // 每次正常停靠都重新给一次「原地补开门」的机会
+      this.target = null;                // 到站目标已兑现
       this.serveDir = this.dir;          // 这次停靠是「朝哪个方向」服务的
       this.world.onCarOpening(this, f);
     }
 
+    /** 当前方向严格前方的停靠点（不含本层） */
+    aheadStops(dir) {
+      if (dir === 0) return [];
+      return this.queueFor(dir).filter((f) => (dir > 0 ? f > this.floor + 0.05 : f < this.floor - 0.05));
+    }
+
     move(dt) {
-      if (this.dir === 0) { this.plan(); return; }
+      // 目标层的呼梯没了就别再追
+      if (this.target != null && !this.callsFor(this.target).length) this.target = null;
+      if (this.dir === 0) {
+        // 待机中：还有任务就重新出发，没有就继续往整层挪（不再乱动）
+        if (this.nearestCall() == null && Math.abs(this.floor - Math.round(this.floor)) < 0.02) {
+          this.floor = Math.round(this.floor);
+          return;
+        }
+        this.plan();
+        if (this.state !== 'moving' || this.dir === 0) {
+          // plan 没给出方向（只可能是要挪到整层），沿用上一次的方向
+          this.dir = this.settleDir || 1;
+        }
+      }
+
+      // 每一帧复核：正方向没任务就盯着反方向（掉头只在整层做，避免两层之间来回摆）
+      if (this.dir !== 0 && this.aheadStops(this.dir).length === 0) {
+        const atInt = Math.abs(this.floor - Math.round(this.floor)) < 0.02;
+        if (!atInt) {
+          // 不在整层：先把手头这一层走完，到整层再决定掉头还是待机
+        } else if (this.aheadStops(-this.dir).length) {
+          this.floor = Math.round(this.floor);
+          this.dir = -this.dir;                          // 反方向有任务 → 立即掉头
+        } else {
+          this.floor = Math.round(this.floor);
+          this.state = 'idle';                           // 两边都空 → 原地待机
+          this.dir = 0;
+          return;
+        }
+      }
+
       let remain = this.floorsPerSec * dt;
       let guard = 0;
       while (remain > 1e-9 && guard++ < 64) {
@@ -201,18 +277,18 @@
           ? Math.floor(this.floor + 1e-9) + 1
           : Math.ceil(this.floor - 1e-9) - 1;
         if (!this.world.building.validFloor(nextInt)) {
-          // 到端点：停在端层，掉头，并检查端层是否要停
           this.floor = this.dir > 0 ? this.world.cfg.floors : 1;
-          this.dir = -this.dir;
           this.state = 'idle';
-          this.plan();
+          if (this.wantsStopAt(this.floor, this.dir)) { this.openDoors(this.floor); return; }
+          this.dir = 0;
           return;
         }
         const gap = Math.abs(nextInt - this.floor);
         if (remain >= gap - 1e-9) {
           this.floor = nextInt;
           remain -= gap;
-          if (this.shouldStopAt(nextInt)) { this.openDoors(nextInt); return; }
+          // 每经过一层都确认一次：这层的呼梯方向和行进方向一致就停
+          if (this.wantsStopAt(nextInt, this.dir)) { this.openDoors(nextInt); return; }
         } else {
           this.floor += this.dir * remain;
           remain = 0;

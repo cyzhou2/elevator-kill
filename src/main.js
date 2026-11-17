@@ -187,17 +187,24 @@
   /* 鼠标：电梯按钮 + 轿厢选层面板 + 开门/关门 */
   const stage = $('stage');
   stage.addEventListener('click', (e) => {
-    if (!world || !renderer || !human || !human.alive || paused || world.finished) return;
+    if (!world || !renderer) return;
+    if (paused || world.finished) return;
+    if (!world.freePlay() && (!human || !human.alive)) return;
     const r = stage.getBoundingClientRect();
     const hit = renderer.hitTest(e.clientX - r.left, e.clientY - r.top);
     if (!hit) return;
+    if (hit.type === 'carBtn') {
+      if (!world.canPressCarButton(hit.carId)) { world.log(`只有身处 ${hit.carId} 梯里才能按它的轿厢按键`, 'you', hit.floor); return; }
+      world.toggleCarButton(hit.carId, hit.floor);
+      return;
+    }
     if (hit.type === 'car') world.toggleCarCall(human, hit.floor);
     else if (hit.type === 'carDoor') {
       const car = human.location.type === 'car' ? world.elev.get(human.location.carId) : null;
       if (car) { if (hit.action === 'open') car.requestOpen(); else car.requestClose(); }
     } else if (hit.type === 'hall') {
       const ok = world.humanPressHall(human, hit.floor, hit.dir, hit.carId);
-      if (!ok) world.log('要站在这一层的电梯厅里才按得到墙上的按钮', 'you', human.location.floor);
+      if (!ok) world.log('要站在这一层的电梯厅里才按得到墙上的按钮', 'you', human ? human.location.floor : hit.floor);
     }
   });
 
