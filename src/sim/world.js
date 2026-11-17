@@ -286,7 +286,9 @@
     /* ---------- 导航（AI 用） ---------- */
 
     navTo(a, targetFloor) {
-      a.nav = { targetFloor, phase: 'plan', timer: 0 };
+      // 被电梯坑过一次的人，这一趟宁可走楼梯（a.forceStairsUntil 由 AI 设置）
+      const forceStairs = !!(a.forceStairsUntil && this.time < a.forceStairsUntil);
+      a.nav = { targetFloor, phase: 'plan', timer: 0, forceStairs };
     }
 
     updateNav(a, dt) {

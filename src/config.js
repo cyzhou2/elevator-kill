@@ -4,7 +4,7 @@
 (function () {
   const EK = (globalThis.EK = globalThis.EK || {});
 
-  EK.VERSION = 'v5.4';
+  EK.VERSION = 'v6.1';
 
   const DEFAULTS = {
     floors: 20,
@@ -46,7 +46,15 @@
       clueUse: true,                  // 杀人犯会不会拿「电梯停在几楼」当线索去查
       clueTtl: 15,                    // 线索保鲜时间
       kidBait: 0.3,                   // 小孩偶尔按了呼梯就跑，制造假停靠
-      kidBaitCooldown: 40             // 每个小孩两次假动作之间的冷却
+      kidBaitCooldown: 40,            // 每个小孩两次假动作之间的冷却
+      // —— v6：更像人的行为参数 ——
+      kidMemorySec: 8,                // 小孩记住「刚才在哪儿看见杀人犯」的时间
+      kidDangerRadius: 1,             // 记忆的危险区半径（层）
+      kidCommitSec: 4,                // 决定换层后至少坚持多久
+      kidRestSec: 2,                  // 到目标层后先喘口气，不立刻再跑
+      killerSweepSpan: 3,             // 杀人犯扫楼时一次跨几层
+      killerCheckedSec: 25,           // 刚查过的楼层多久内不重复查
+      killerWrongWaySec: 3            // 坐反方向超过这么久就在下一站下车
     },
 
     capture: { rangeM: 0.8, gripSec: 0.4, stairRangeM: 1.2 },

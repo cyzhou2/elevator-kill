@@ -242,6 +242,15 @@
     move(dt) {
       // 目标层的呼梯没了就别再追
       if (this.target != null && !this.callsFor(this.target).length) this.target = null;
+
+      // 0) 已经在整层，而且这层要停 → 先开门，绝不跳过（修：车正好压在整层线时会直接掉头）
+      const atFloor = Math.round(this.floor);
+      if (Math.abs(this.floor - atFloor) < 0.02 && this.wantsStopAt(atFloor, this.dir)) {
+        this.floor = atFloor;
+        this.openDoors(atFloor);
+        return;
+      }
+
       if (this.dir === 0) {
         // 待机中：还有任务就重新出发，没有就继续往整层挪（不再乱动）
         if (this.nearestCall() == null && Math.abs(this.floor - Math.round(this.floor)) < 0.02) {
@@ -293,6 +302,13 @@
         } else {
           this.floor += this.dir * remain;
           remain = 0;
+          // 恰好落在整层线上也要确认一次（否则下一帧可能先掉头、不开门）
+          const land = Math.round(this.floor);
+          if (Math.abs(this.floor - land) < 1e-6 && this.wantsStopAt(land, this.dir)) {
+            this.floor = land;
+            this.openDoors(land);
+            return;
+          }
         }
       }
     }
