@@ -9,6 +9,8 @@
   let paused = false, lastTs = 0, raf = 0;
   let introSeen = false;
   const keys = { left: false, right: false };
+  // v8：全鼠标「一键到底」——点击地面/楼梯/电梯后自动走过去并执行
+  let intent = null;
 
   function currentFocus() {
     if (!world) return null;
@@ -81,6 +83,7 @@
 
   function applyInput() {
     if (!human || !human.alive) return;
+    if (intent) driveIntent();
     if (human.location.type === 'floor') {
       human.input = (keys.right ? 1 : 0) + (keys.left ? -1 : 0);
     } else {
@@ -170,8 +173,8 @@
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
       return;
     }
-    if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
-    if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') { keys.left = true; clearIntent(); }
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') { keys.right = true; clearIntent(); }
 
     const act = KEY_ACTIONS[e.code];
     if (!act) return;
@@ -187,7 +190,117 @@
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false;
   });
 
-  /* 鼠标：电梯按钮 + 轿厢选层面板 + 开门/关门 */
+  /* ---------- v8：鼠标意图（点一下，自动走过去并执行） ---------- */
+
+  function setIntent(next) {
+    intent = next;
+    if (intent) intent.t = world.time;
+  }
+  function clearIntent() { intent = null; }
+
+  function nearestLanding() {
+    const b = world.building;
+    return Math.abs(human.location.x - b.aX) <= Math.abs(human.location.x - b.bX) ? 'A' : 'B';
+  }
+
+  /** 每帧驱动：把「想去哪」翻译成走动 + 到点后的动作 */
+  function driveIntent() {
+    if (!intent) return;
+    if (!human || !human.alive || world.finished || paused) { intent = null; keys.left = keys.right = false; return; }
+    const b = world.building;
+    const loc = human.location;
+
+    if (loc.type === 'stair') { keys.left = keys.right = false; return; }   // 正在爬，等落地
+
+    if (loc.type === 'car') {
+      const car = world.elev.get(loc.carId);
+      if (intent.kind === 'goto' && intent.targetFloor != null && !intent.selected && car) {
+        world.toggleCarButton(car.id, intent.targetFloor);
+        intent.selected = true;
+      }
+      if (car && car.doorsOpen && intent.targetFloor != null && Math.abs(car.floor - intent.targetFloor) < 0.05) {
+        world.humanAction(human, 'space');               // 到站下梯
+        intent = intent.x != null ? { kind: 'walk', x: intent.x, t: world.time } : null;
+      } else if (car && car.doorsOpen && intent.kind === 'exitHere') {
+        world.humanAction(human, 'space');
+        intent = null;
+      }
+      return;
+    }
+
+    // —— 在楼层上 ——
+    const walkTo = (x) => {
+      const d = x - loc.x;
+      if (Math.abs(d) <= 0.12) { keys.left = keys.right = false; return true; }
+      keys.right = d > 0; keys.left = d < 0;
+      return false;
+    };
+
+    if (intent.kind === 'walk') {
+      if (walkTo(intent.x)) clearIntent();
+      return;
+    }
+
+    if (intent.kind === 'call') {                       // 走到电梯厅按呼梯
+      const lx = (b.lobbyStart + b.lobbyEnd) / 2;
+      if (walkTo(lx)) {
+        world.humanPressHall(human, loc.floor, intent.dir, intent.carId || null);
+        clearIntent();
+      }
+      return;
+    }
+
+    if (intent.kind === 'board') {                      // 走到开门的电梯旁并进梯
+      const car = world.elev.get(intent.carId);
+      if (!car) { clearIntent(); return; }
+      const doorX = world.carDoorX(car.id);
+      const reach = walkTo(doorX);
+      const openHere = car.doorsOpen && Math.abs(car.floor - loc.floor) < 0.05;
+      if (openHere && (reach || Math.abs(loc.x - doorX) <= world.cfg.elevator.boardRangeM)) {
+        human.boardRequest = true;
+        clearIntent();
+      } else if (!openHere && reach && !intent.waited) {
+        // 门没开：帮他按一下这一侧的呼梯
+        world.humanPressHall(human, loc.floor, intent.dir != null ? intent.dir : 1, car.id);
+        intent.waited = true;
+      }
+      return;
+    }
+
+    if (intent.kind === 'goto') {
+      if (loc.floor === intent.targetFloor) {
+        const done = intent.x != null ? walkTo(intent.x) : (keys.left = keys.right = false, true);
+        if (done) clearIntent();
+        return;
+      }
+      const dir = intent.targetFloor > loc.floor ? 1 : -1;
+      // 路线：1~2 层走楼梯，更远等电梯
+      if (intent.route == null) intent.route = Math.abs(intent.targetFloor - loc.floor) <= 2 ? 'stairs' : 'lift';
+
+      if (intent.route === 'stairs') {
+        const landing = nearestLanding();
+        const lx = b.landingX(landing);
+        if (walkTo(lx)) {
+          keys.left = keys.right = false;
+          world.humanAction(human, dir > 0 ? 'stairUp' : 'stairDown');
+        }
+        return;
+      }
+
+      // 电梯：先到电梯厅，按目标方向的呼梯，等门开就进
+      const lx = (b.lobbyStart + b.lobbyEnd) / 2;
+      if (!walkTo(lx)) return;
+      const open = world.openCarAt(loc.floor);
+      if (open.length) { human.boardRequest = true; return; }
+      if (!intent.pressed) {
+        world.humanPressHall(human, loc.floor, dir, null);
+        intent.pressed = true;
+      }
+      return;
+    }
+  }
+
+  /* 鼠标：按钮 / 轿厢 / 楼梯 / 地面 */
   const stage = $('stage');
   stage.addEventListener('click', (e) => {
     if (!world || !renderer) return;
@@ -196,20 +309,48 @@
     const r = stage.getBoundingClientRect();
     const hit = renderer.hitTest(e.clientX - r.left, e.clientY - r.top);
     if (!hit) return;
+    const b = world.building;
+
     if (hit.type === 'carBtn') {
       if (!world.canPressCarButton(hit.carId)) { world.log(`只有身处 ${hit.carId} 梯里才能按它的轿厢按键`, 'you', hit.floor); return; }
       world.toggleCarButton(hit.carId, hit.floor);
       return;
     }
-    if (hit.type === 'car') world.toggleCarCall(human, hit.floor);
-    else if (hit.type === 'carDoor') {
+    if (hit.type === 'carDoor') {
       const carId = hit.carId;
       if (!world.canPressCarButton(carId)) { world.log(`只有身处 ${carId} 梯里才能按它的开/关门键`, 'you', hit.floor); return; }
       const car = world.elev.get(carId);
       if (car) { if (hit.action === 'open') car.requestOpen(); else car.requestClose(); }
-    } else if (hit.type === 'hall') {
+      return;
+    }
+    if (hit.type === 'hall') {
       const ok = world.humanPressHall(human, hit.floor, hit.dir, hit.carId);
-      if (!ok) world.log('要站在这一层的电梯厅里才按得到墙上的按钮', 'you', human ? human.location.floor : hit.floor);
+      if (!ok) setIntent({ kind: 'call', floor: hit.floor, dir: hit.dir, carId: hit.carId });
+      return;
+    }
+    if (hit.type === 'carBody') {                       // 点轿厢：走过去进梯 / 或按呼梯
+      if (human.location.type === 'car') return;
+      const car = world.elev.get(hit.carId);
+      const here = Math.abs(car.floor - human.location.floor) < 0.05;
+      const dir = hit.floor > human.location.floor ? 1 : -1;
+      setIntent({ kind: 'board', carId: hit.carId, dir, targetFloor: Math.round(hit.floor) });
+      if (!here) setIntent({ kind: 'call', floor: human.location.floor, dir, carId: null });
+      return;
+    }
+    if (hit.type === 'shaft') {                          // 点楼梯：自动用楼梯去那一层
+      const g = renderer.geo;
+      const targetFloor = Math.max(1, Math.min(g.floors, g.floorFromY(hit.y)));
+      setIntent({ kind: 'goto', targetFloor, route: 'stairs' });
+      return;
+    }
+    if (hit.type === 'floor') {                          // 点地面：走过去；点别的楼层：自动前往
+      if (human.location.type === 'car') { setIntent({ kind: 'exitHere' }); return; }
+      if (hit.floor !== human.location.floor) {
+        setIntent({ kind: 'goto', targetFloor: hit.floor, x: hit.x });
+      } else {
+        setIntent({ kind: 'walk', x: hit.x });
+      }
+      return;
     }
   });
 
@@ -298,6 +439,9 @@
     keys,
     touch,
     boot,
+    get intent() { return intent; },
+    setIntent,
+    clearIntent,
     setPaused(v) { paused = !!v; },
     showEnd,
     focus: currentFocus,

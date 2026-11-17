@@ -21,6 +21,8 @@
       this.hallHits = [];
       this.carHits = [];
       this.carBtnHits = [];
+      this.shaftHits = [];
+      this.carBodyHits = [];
       this.trails = new Map();
     }
 
@@ -46,6 +48,8 @@
         W, H, padTop, padBottom, padLeft, padRight, floors, rowH, cw, L,
         narrow, btnW, btnH, btnGap, groupW, labelRight, groupX,
         xM: (m) => padLeft + (m / L) * cw,
+        mFromX: (px) => ((px - padLeft) / cw) * L,
+        floorFromY: (py) => Math.round(floors - (py - padTop) / rowH + 0.5),
         yFloor: (f) => padTop + (floors - f) * rowH + rowH * 0.5,
         yRowTop: (f) => padTop + (floors - f) * rowH,
         shaftA: padLeft - 12,
@@ -61,6 +65,8 @@
       this.hallHits = [];
       this.carHits = [];
       this.carBtnHits = [];
+      this.shaftHits = [];
+      this.carBodyHits = [];
       this.focusCarId = focus && focus.location && focus.location.type === 'car' ? focus.location.carId : null;
 
       ctx.clearRect(0, 0, g.W, g.H);
@@ -80,7 +86,7 @@
 
       for (const car of world.elev.cars) {
         const x = g.xM(world.carDoorX(car.id));
-        this.drawShaft(x, g);
+        this.drawShaft(x, g, car.id);
         const disp = P.carDisplay(world, fog ? focus : null, car);
         this.drawCar(world, car, x, g, fog, focus, disp);
       }
@@ -123,10 +129,26 @@
           return { type: 'carBtn', floor: b.floor, carId: b.carId };
         }
       }
+      for (const b of this.carBodyHits) {
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+          return { type: 'carBody', carId: b.carId, floor: b.floor, exact: b.exact };
+        }
+      }
+      for (const b of this.shaftHits) {
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+          return { type: 'shaft', landing: b.landing, y: my };
+        }
+      }
       for (const b of this.hallHits) {
         if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
           return { type: 'hall', floor: b.floor, dir: b.dir, carId: b.carId };
         }
+      }
+      const g = this.geo;
+      if (g && my > g.yRowTop(g.floors) && my < g.yRowTop(1) + g.rowH && mx > g.padLeft && mx < g.padLeft + g.cw) {
+        const floor = Math.max(1, Math.min(g.floors, g.floorFromY(my)));
+        const m = Math.max(0.2, Math.min(g.L - 0.2, g.mFromX(mx)));
+        return { type: 'floor', floor, x: m };
       }
       return null;
     }
@@ -213,9 +235,11 @@
       ctx.textAlign = 'center';
       ctx.fillText(landing === 'A' ? '梯0' : '梯1', x, top - 5);
       ctx.textAlign = 'left';
+      // 整条楼梯竖井都可以点：点上半段 = 上楼，下半段 = 下楼
+      this.shaftHits.push({ x: x - 12, y: top, w: 24, h: bottom - top, landing });
     }
 
-    drawShaft(x, g) {
+    drawShaft(x, g, carId) {
       const ctx = this.ctx;
       ctx.fillStyle = COL.shaft;
       ctx.fillRect(x - 15, g.yRowTop(g.floors) + 4, 30, g.rowH * g.floors - 8);
@@ -251,6 +275,7 @@
         return;
       }
 
+      this.carBodyHits.push({ x: x - 14, y: cy - h, w: 28, h: h * 2, carId: car.id, floor: disp.floor, exact: disp.exact });
       const inside = fog && focus && focus.location.type === 'car' && focus.location.carId === car.id;
       const throughDoors = fog && focus && focus.location.type === 'floor'
         && car.doorsOpen && Math.abs(car.floor - focus.location.floor) < 0.05

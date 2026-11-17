@@ -242,8 +242,8 @@ kbd {
 @media (max-width: 900px), (orientation: portrait) {
   html, body { overflow: hidden; -webkit-text-size-adjust: 100%; }
   #app { display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr; height: 100dvh; }
-  #stageWrap { width: 100%; height: 100%; padding: 4px; display: flex; flex-direction: column; }
-  #stageWrap #stage { flex: 1 1 auto; min-height: 0; height: auto; }
+  #stageWrap { width: 100%; height: 100%; min-height: 0; padding: 4px; display: flex; flex-direction: column; }
+  #stageWrap #stage { flex: 1 1 0; min-height: 0; height: 100%; width: 100%; }
   #stageWrap .touch { position: static; padding: 6px 8px 8px; background: #0b1118; border-top: 1px solid var(--line); }
   .dpad { grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(3, 56px); }
   .side2 { flex-direction: row; align-items: flex-end; }
@@ -331,4 +331,17 @@ kbd {
   #app { grid-template-columns: 1fr; }
   #hud { display: none; }
   #clockHud span { font-size: 22px; }
+}
+/* ---------- v8：横屏手机 / 小高度屏幕 ---------- */
+@media (max-height: 560px) {
+  #app { grid-template-columns: 1fr; }
+  #hud { display: none; }
+  #topbar { left: 8px; top: 6px; }
+  #topbar .topbtn { min-width: 54px; padding: 4px 10px; font-size: 11px; }
+  #clockHud { right: 10px; top: 4px; }
+  #clockHud span { font-size: 20px; }
+  #stageWrap .touch { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 8px; background: linear-gradient(transparent, rgba(8,12,18,.55)); }
+  .dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); gap: 5px; }
+  .side2 { flex-direction: row; }
+  .side2 .sm { width: 52px; height: 46px; font-size: 16px; }
 }
