@@ -2,91 +2,22 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>电梯公寓大逃杀 v6.2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>电梯公寓大逃杀 v7</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div id="app">
-  <aside id="sidebar">
-    <h1>电梯公寓<span>大逃杀</span><em id="ver">v6.2</em><button id="btnHelp" class="mini" title="玩法 / 教程">?</button></h1>
-
-    <section class="grp">
-      <label class="row">模式
-        <select id="modeSel">
-          <option value="escape">逃生（我当小孩）</option>
-          <option value="hunt">猎杀（我当杀人犯）</option>
-          <option value="spectate">观战（全 AI）</option>
-        </select>
-      </label>
-      <label class="row">视角
-        <select id="viewSel">
-          <option value="fog">有限视角</option>
-          <option value="god">上帝视角</option>
-        </select>
-      </label>
-    </section>
-
-    <section class="grp">
-      <div class="lbl">局面</div>
-      <label class="row">小孩 <input id="kidsNum" type="number" min="1" max="8" value="3" /></label>
-      <label class="row">杀人犯 <input id="killersNum" type="number" min="1" max="6" value="2" /></label>
-      <label class="row">时长（秒）<input id="roundNum" type="number" min="30" max="900" step="10" value="180" /></label>
-      <label class="row">模拟倍速
-        <select id="speedSel">
-          <option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option>
-          <option value="2">2×</option>
-          <option value="4">4×</option>
-        </select>
-      </label>
-    </section>
-
-    <section class="grp btns">
-      <button id="btnStart" class="primary">开始</button>
-      <button id="btnPause">暂停</button>
-      <button id="btnReset">重开</button>
-    </section>
-
-    <section class="grp">
-      <div class="lbl">电梯</div>
-      <label class="row">层间秒<input id="pSecFloor" type="range" min="1" max="6" step="0.1" value="2" /><b id="vSecFloor">2</b></label>
-      <label class="row">开门<input id="pDoorOpen" type="range" min="0.5" max="4" step="0.1" value="1.5" /><b id="vDoorOpen">1.5</b></label>
-      <label class="row">保持<input id="pDoorHold" type="range" min="0.5" max="6" step="0.1" value="3" /><b id="vDoorHold">3</b></label>
-      <label class="row">关门<input id="pDoorClose" type="range" min="0.5" max="4" step="0.1" value="1.5" /><b id="vDoorClose">1.5</b></label>
-      <label class="row">楼道长<input id="pCorridor" type="range" min="0" max="16" step="0.5" value="1" /><b id="vCorridor">1</b></label>
-      <div class="col"><span>呼梯按钮</span>
-        <span class="toggle" id="hallToggle" title="点亮=公用一套（群控派梯）；熄灭=每部梯一套（各按各的）">
-          <i id="hallDot" class="dot on"></i><b id="hallModeText">公用一套</b>
-        </span>
-      </div>
-    </section>
-
-    <section class="grp">
-      <div class="lbl">角色</div>
-      <label class="row">小孩速<input id="pKidSpeed" type="range" min="1" max="4" step="0.05" value="2.2" /><b id="vKidSpeed">2.2</b></label>
-      <label class="row">小孩爬楼<input id="pKidStair" type="range" min="0.05" max="0.6" step="0.01" value="0.22" /><b id="vKidStair">0.22</b></label>
-      <label class="row">杀人犯速<input id="pKillerSpeed" type="range" min="1" max="5" step="0.05" value="2.6" /><b id="vKillerSpeed">2.6</b></label>
-      <label class="row">杀人犯爬楼<input id="pKillerStair" type="range" min="0.05" max="0.6" step="0.01" value="0.26" /><b id="vKillerStair">0.26</b></label>
-      <label class="row">视距<input id="pVision" type="range" min="4" max="24" step="1" value="14" /><b id="vVision">14</b></label>
-      <label class="row">小孩反应<input id="pReaction" type="range" min="0" max="0.8" step="0.05" value="0.2" /><b id="vReaction">0.2</b></label>
-      <label class="row">抓捕耗时<input id="pGrip" type="range" min="0" max="2" step="0.05" value="0.4" /><b id="vGrip">0.4</b></label>
-      <label class="row">情报寿命<input id="pChannel" type="range" min="1" max="20" step="1" value="6" /><b id="vChannel">6</b></label>
-    </section>
-
-    <div class="hint">
-      <div><kbd>A</kbd><kbd>D</kbd> 左右移动</div>
-      <div><kbd>W</kbd><kbd>S</kbd> 楼梯口上下楼（楼梯上按反方向可掉头）</div>
-      <div><kbd>Q</kbd><kbd>E</kbd> 电梯厅按 ▼/▲；轿厢里开/关门</div>
-      <div><kbd>空格</kbd> 按身边的按钮 / 进出电梯</div>
-      <div>鼠标点左侧 C 列 / 右侧 D 列的按钮呼梯</div>
-      <div><kbd>P</kbd> 暂停</div>
-      <div class="backlink"><a href="https://cyzhou2.github.io/cyzhou2GameCenter/" target="_blank" rel="noopener">← 返回游戏中心</a></div>
-    </div>
-  </aside>
-
   <main id="stageWrap">
     <canvas id="stage"></canvas>
+
+    <!-- 主界面只留：开始 / 暂停 / 剩余时间 -->
+    <div id="topbar">
+      <button id="btnStart" class="topbtn">开始</button>
+      <button id="btnPause" class="topbtn">暂停</button>
+    </div>
+    <div id="clockHud"><span id="clock">03:00</span><small>剩余</small></div>
+
     <div id="touch" class="touch hidden">
       <div class="dpad">
         <button class="tb up" data-act="up" aria-label="上楼">▲</button>
@@ -100,13 +31,14 @@
         <button class="tb sm" data-act="q" id="tbQ" aria-label="下呼">▼</button>
       </div>
     </div>
+
     <div id="overlay" class="hidden">
       <div id="overlayCard"></div>
     </div>
   </main>
 
+  <!-- 右侧信息（桌面端保留；竖屏隐藏） -->
   <aside id="hud">
-    <div class="timer"><span id="clock">03:00</span><small>剩余</small></div>
     <div class="statline"><span>存活 <b id="aliveKids">3</b></span><span>被抓 <b id="caught">0</b></span></div>
     <div class="youbox" id="youStatus">—</div>
     <div class="board">
@@ -124,20 +56,98 @@
   </aside>
 </div>
 
-<!-- 进入游戏时的简介 / 教程（可跳过） -->
-<div id="intro" class="hidden">
-  <div class="introCard">
-    <div class="introHead">
-      <span class="ver" id="introVer">v6.2</span>
-      <h2>电梯公寓大逃杀</h2>
-      <div class="dots" id="introDots"></div>
+<!-- 暂停菜单：教程 / 设置，应用 or 取消 -->
+<div id="menu" class="hidden">
+  <div class="menuCard">
+    <div class="menuHead">
+      <span class="ver" id="menuVer">v7</span>
+      <div class="tabs">
+        <button class="tab on" data-tab="guide">教程</button>
+        <button class="tab" data-tab="setup">设置</button>
+      </div>
     </div>
-    <div class="introBody" id="introBody"></div>
-    <div class="introFoot">
-      <button id="introSkip" class="ghost">跳过教程</button>
+
+    <div class="menuBody">
+      <!-- 教程页 -->
+      <section id="tabGuide" class="tabpage">
+        <div class="introBody" id="introBody"></div>
+        <div class="introNav">
+          <span class="spacer"></span>
+          <button id="introPrev" class="ghost">上一页</button>
+          <button id="introNext" class="primary">下一页</button>
+        </div>
+      </section>
+
+      <!-- 设置页 -->
+      <section id="tabSetup" class="tabpage hidden">
+        <div class="setupGrid">
+          <div class="col2">
+            <label class="row">模式
+              <select id="modeSel">
+                <option value="escape">逃生（我当小孩）</option>
+                <option value="hunt">猎杀（我当杀人犯）</option>
+                <option value="spectate">观战（全 AI）</option>
+              </select>
+            </label>
+            <label class="row">视角
+              <select id="viewSel">
+                <option value="fog">有限视角</option>
+                <option value="god">上帝视角</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="lbl">局面</div>
+          <div class="col2">
+            <label class="row">小孩 <input id="kidsNum" type="number" min="1" max="8" value="3" /></label>
+            <label class="row">杀人犯 <input id="killersNum" type="number" min="1" max="6" value="2" /></label>
+            <label class="row">时长（秒）<input id="roundNum" type="number" min="30" max="900" step="10" value="180" /></label>
+            <label class="row">倍速
+              <select id="speedSel">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="2">2×</option>
+                <option value="4">4×</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="lbl">电梯</div>
+          <div class="col2">
+            <label class="row">层间秒<input id="pSecFloor" type="range" min="1" max="6" step="0.1" value="2" /><b id="vSecFloor">2</b></label>
+            <label class="row">开门<input id="pDoorOpen" type="range" min="0.5" max="4" step="0.1" value="1.5" /><b id="vDoorOpen">1.5</b></label>
+            <label class="row">保持<input id="pDoorHold" type="range" min="0.5" max="6" step="0.1" value="3" /><b id="vDoorHold">3</b></label>
+            <label class="row">关门<input id="pDoorClose" type="range" min="0.5" max="4" step="0.1" value="1.5" /><b id="vDoorClose">1.5</b></label>
+            <label class="row">楼道长<input id="pCorridor" type="range" min="0" max="16" step="0.5" value="1" /><b id="vCorridor">1</b></label>
+          </div>
+          <div class="col2">
+            <div class="col"><span>呼梯按钮</span>
+              <span class="toggle" id="hallToggle" title="点亮=公用一套（群控派梯）；熄灭=每部梯一套（各按各的）">
+                <i id="hallDot" class="dot on"></i><b id="hallModeText">公用一套</b>
+              </span>
+            </div>
+          </div>
+
+          <div class="lbl">角色</div>
+          <div class="col2">
+            <label class="row">小孩速<input id="pKidSpeed" type="range" min="1" max="4" step="0.05" value="2.2" /><b id="vKidSpeed">2.2</b></label>
+            <label class="row">小孩爬楼<input id="pKidStair" type="range" min="0.05" max="0.6" step="0.01" value="0.22" /><b id="vKidStair">0.22</b></label>
+            <label class="row">杀人犯速<input id="pKillerSpeed" type="range" min="1" max="5" step="0.05" value="2.6" /><b id="vKillerSpeed">2.6</b></label>
+            <label class="row">杀人犯爬楼<input id="pKillerStair" type="range" min="0.05" max="0.6" step="0.01" value="0.26" /><b id="vKillerStair">0.26</b></label>
+            <label class="row">视距<input id="pVision" type="range" min="4" max="24" step="1" value="14" /><b id="vVision">14</b></label>
+            <label class="row">小孩反应<input id="pReaction" type="range" min="0" max="0.8" step="0.05" value="0.2" /><b id="vReaction">0.2</b></label>
+            <label class="row">抓捕耗时<input id="pGrip" type="range" min="0" max="2" step="0.05" value="0.4" /><b id="vGrip">0.4</b></label>
+            <label class="row">情报寿命<input id="pChannel" type="range" min="1" max="20" step="1" value="6" /><b id="vChannel">6</b></label>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="menuFoot">
+      <a class="backlink" href="https://cyzhou2.github.io/cyzhou2GameCenter/" target="_blank" rel="noopener">← 游戏中心</a>
       <span class="spacer"></span>
-      <button id="introPrev" class="ghost">上一页</button>
-      <button id="introNext" class="primary">下一页</button>
+      <button id="menuCancel" class="ghost">取消</button>
+      <button id="menuApply" class="primary">应用（重开一局）</button>
     </div>
   </div>
 </div>

@@ -25,7 +25,7 @@
           <li><b class="killer">杀人犯</b>：移速更快，抓住小孩得 100 分。他们之间用共享频道互通情报，但只共享各自<b>亲眼看到</b>的东西。</li>
           <li>一局默认 180 秒；小孩全被抓则提前结束。</li>
         </ul>
-        <p class="tiny">左侧可以切模式（我当小孩 / 我当杀人犯 / 纯观战）和视角（有限视角只能看到自己视野内，上帝视角全楼可见）。</p>`
+        <p class="tiny">暂停菜单的「设置」里可以切模式（我当小孩 / 我当杀人犯 / 纯观战）和视角（有限视角只能看到自己视野内，上帝视角全楼可见）。手机上固定为「我当小孩 + 有限视角」。</p>`
     },
     {
       title: '楼里怎么走',
@@ -57,15 +57,15 @@
           <tr><td><kbd>W</kbd><kbd>S</kbd></td><td>楼梯口上楼 / 下楼；楼梯上按反方向键，原地掉头走回出发点</td></tr>
           <tr><td><kbd>Q</kbd><kbd>E</kbd></td><td>电梯厅里按 ▼ / ▲ 呼梯（画面最左一列是 C 的按钮，最右一列是 D 的，和楼层对齐）；进轿厢后是开门 / 关门</td></tr>
           <tr><td><kbd>空格</kbd></td><td>站在电梯厅左半边按 ▼、右半边按 ▲；电梯门开着时进 / 出电梯</td></tr>
-          <tr><td><kbd>P</kbd></td><td>暂停</td></tr>
-          <tr><td>鼠标</td><td>点墙上的 ▲▼ 呼梯；轿厢里点左右两侧选层（再点取消），旁边一列是开门 / 关门</td></tr>
+          <tr><td><kbd>P</kbd></td><td>暂停，并打开这个菜单（教程 / 设置）</td></tr>
+          <tr><td>鼠标</td><td>点每层电梯厅两侧的 ▲▼ 呼梯；轿厢里点两端的楼层标识框选层（再点取消），两侧是开 / 关门</td></tr>
         </table>
-        <p class="tiny">侧栏「呼梯按钮」那个小圆点：亮 = 两部梯公用一套按钮（按下后由系统派梯）；灭 = 每部梯一套按钮（各按各的）。</p>`
+        <p class="tiny">设置页里「呼梯按钮」的小圆点：亮 = 两部梯公用一套按钮（系统派梯）；灭 = 每部梯一套。改完点「应用」会立刻用新参数重开一局，「取消」则丢弃改动。</p>`
     }
   ];
 
   const UI = {
-    intro: { page: 0, onDone: null, bound: false },
+    menu: { page: 0, tab: 'guide', bound: false },
     hallMode: 'shared',   // 'shared' 公用一套（点亮）| 'split' 每部梯一套（熄灭）
 
     init() {
@@ -97,8 +97,8 @@
       }
       $('hallToggle').addEventListener('click', () => this.setHallMode(this.hallMode === 'shared' ? 'split' : 'shared'));
       this.setHallMode(D.elevator.hallButtons || 'shared');
-      $('ver').textContent = EK.VERSION;
-      $('introVer').textContent = EK.VERSION;
+      const mv = $('menuVer');
+      if (mv) mv.textContent = EK.VERSION;
       document.title = `电梯公寓大逃杀 ${EK.VERSION}`;
     },
 
@@ -111,9 +111,11 @@
     readSettings() {
       const num = (id) => parseFloat($(id).value);
       const vision = num('pVision');
+      // 手机（竖屏/窄屏）固定当小孩 + 黑暗视角，菜单里也不给换
+      const mobile = this.isMobile();
       return {
-        mode: $('modeSel').value,
-        view: $('viewSel').value,
+        mode: mobile ? 'escape' : $('modeSel').value,
+        view: mobile ? 'fog' : $('viewSel').value,
         speed: parseFloat($('speedSel').value),
         cfg: {
           kids: parseInt($('kidsNum').value, 10) || 3,
@@ -135,47 +137,75 @@
       };
     },
 
-    /* ---------- 简介 / 教程 ---------- */
+    /* ---------- 暂停菜单：教程 / 设置 ---------- */
 
-    showIntro(onDone) {
-      this.intro.onDone = onDone || null;
-      this.intro.page = 0;
-      $('intro').classList.remove('hidden');
-      this.renderIntro();
-      if (!this.intro.bound) {
-        this.intro.bound = true;
-        $('introSkip').onclick = () => this.closeIntro();
-        $('introPrev').onclick = () => { if (this.intro.page > 0) { this.intro.page--; this.renderIntro(); } };
+    isMobile() {
+      try { return window.matchMedia('(max-width: 900px), (orientation: portrait)').matches; } catch (_) { return false; }
+    },
+
+    openMenu(tab) {
+      $('menu').classList.remove('hidden');
+      this.setTab(tab || 'guide');
+      if (!this.menu.bound) {
+        this.menu.bound = true;
+        $('introPrev').onclick = () => { if (this.menu.page > 0) { this.menu.page--; this.renderGuide(); } };
         $('introNext').onclick = () => {
-          if (this.intro.page < INTRO.length - 1) { this.intro.page++; this.renderIntro(); }
-          else this.closeIntro();
+          if (this.menu.page < INTRO.length - 1) { this.menu.page++; this.renderGuide(); }
+          else this.setTab('setup');
         };
+        for (const btn of document.querySelectorAll('.tabs .tab')) {
+          btn.onclick = () => this.setTab(btn.dataset.tab);
+        }
         document.addEventListener('keydown', (e) => {
-          if ($('intro').classList.contains('hidden')) return;
-          if (e.code === 'Escape') this.closeIntro();
-          else if (e.code === 'ArrowRight' || e.code === 'Enter') $('introNext').click();
-          else if (e.code === 'ArrowLeft') $('introPrev').click();
+          if ($('menu').classList.contains('hidden')) return;
+          if (this.menu.tab !== 'guide') return;
+          if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); $('introNext').click(); }
+          else if (e.key === 'ArrowLeft') { e.preventDefault(); $('introPrev').click(); }
         });
       }
     },
 
-    renderIntro() {
-      const p = INTRO[this.intro.page];
-      $('introBody').innerHTML = `<h3>${p.title}</h3>${p.html}`;
-      $('introDots').innerHTML = INTRO.map((_, i) => `<i class="${i === this.intro.page ? 'on' : ''}"></i>`).join('');
-      $('introPrev').disabled = this.intro.page === 0;
-      $('introNext').textContent = this.intro.page === INTRO.length - 1 ? '开始游戏' : '下一页';
+    closeMenu() { $('menu').classList.add('hidden'); },
+    menuOpen() { return !$('menu').classList.contains('hidden'); },
+
+    setTab(tab) {
+      this.menu.tab = tab;
+      for (const btn of document.querySelectorAll('.tabs .tab')) btn.classList.toggle('on', btn.dataset.tab === tab);
+      $('tabGuide').classList.toggle('hidden', tab !== 'guide');
+      $('tabSetup').classList.toggle('hidden', tab !== 'setup');
+      if (tab === 'guide') this.renderGuide();
+    },
+
+    renderGuide() {
+      const p = INTRO[this.menu.page];
+      $('introBody').innerHTML = '<h3>' + p.title + '</h3>' + p.html;
+      $('introPrev').disabled = this.menu.page === 0;
+      $('introNext').textContent = this.menu.page === INTRO.length - 1 ? '去设置' : '下一页';
       $('introBody').scrollTop = 0;
     },
 
-    closeIntro() {
-      $('intro').classList.add('hidden');
-      const cb = this.intro.onDone;
-      this.intro.onDone = null;
-      if (cb) cb();
+    /** 把当前这局的设置写回菜单控件（取消改动 / 开局时都用它） */
+    loadInputs(s) {
+      const el = (id) => $(id);
+      const set = (id, v) => { if (el(id) && v != null) el(id).value = v; };
+      const setSel = (id, v) => { if (el(id) && v != null) el(id).value = v; };
+      if (!s) return;
+      const c = s.cfg || {};
+      const ev = c.elevator || {};
+      set('kidsNum', c.kids); set('killersNum', c.killers); set('roundNum', c.roundSeconds);
+      set('pSecFloor', ev.secPerFloor); set('pDoorOpen', ev.doorOpenSec);
+      set('pDoorHold', ev.doorHoldSec); set('pDoorClose', ev.doorCloseSec);
+      set('pCorridor', c.corridorSideM);
+      if (c.kid) { set('pKidSpeed', c.kid.speed); set('pKidStair', c.kid.stairSpeed); set('pVision', c.kid.vision); set('pReaction', c.kid.reactionSec); }
+      if (c.killer) { set('pKillerSpeed', c.killer.speed); set('pKillerStair', c.killer.stairSpeed); }
+      if (c.capture) set('pGrip', c.capture.gripSec);
+      if (c.channel) set('pChannel', c.channel.ttlSec);
+      setSel('modeSel', s.mode);
+      setSel('viewSel', s.view);
+      setSel('speedSel', s.speed);
+      this.setHallMode((ev.hallButtons) || 'shared');
+      for (const [sid, vid] of SLIDERS) { const inp = $(sid), out = $(vid); if (inp && out) out.textContent = inp.value; }
     },
-
-    introOpen() { return !$('intro').classList.contains('hidden'); },
 
     /* ---------- HUD ---------- */
 
@@ -188,7 +218,7 @@
       // 电梯板：精确读数 / 按记忆外推的虚影（带 ?） / 完全不知道
       const board = $('elevBoard');
       const viewer = settings.view === 'god' ? null : human;
-      board.innerHTML = world.elev.cars.map((c) => {
+      const boardHtml = world.elev.cars.map((c) => {
         const d = EK.Perception.carDisplay(world, viewer, c);
         if (!d.known) {
           return `<div class="elevrow"><span>${c.id}梯</span><span class="unk">??</span><span class="dir">-</span><span></span></div>`;
@@ -199,6 +229,7 @@
         return `<div class="elevrow"><span>${c.id}梯</span><span>${Math.round(d.floor)}F${q}</span>` +
                `<span class="dir">${dir}</span><span>${open}</span></div>`;
       }).join('');
+      if (boardHtml !== this._boardHtml) { this._boardHtml = boardHtml; board.innerHTML = boardHtml; }
 
       const rows = [];
       for (const a of world.actors) {
@@ -210,7 +241,8 @@
           rows.push(`<div class="scoreline"><span class="${a === human ? 'human' : 'killer'}">${a.name}</span><span>抓 ${a.kills}</span></div>`);
         }
       }
-      $('scoreList').innerHTML = rows.join('');
+      const rowsHtml = rows.join('');
+      if (rowsHtml !== this._rowsHtml) { this._rowsHtml = rowsHtml; $('scoreList').innerHTML = rowsHtml; }
 
       this.renderYou(world, human);
       this.renderTouch(human);
@@ -263,7 +295,7 @@
       el.textContent = `你在 ${L.floor}F ${region}${hint}`;
     },
 
-    _logCount: 0,
+    _logCount: 0, _boardHtml: '', _rowsHtml: '',
     renderLog(world, human, fog) {
       const box = $('log');
       const events = world.events;

@@ -30,7 +30,7 @@
       this.canvas.width = Math.round(W * dpr);
       this.canvas.height = Math.round(H * dpr);
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const padTop = 20, padBottom = 18;
+      const padTop = 42, padBottom = 16;   // 顶部留给 开始/暂停 与 剩余时间
       // 窄屏（手机竖屏）把两侧收窄，把空间留给楼层本身
       const narrow = W < 640;
       const btnW = narrow ? 15 : 20, btnH = narrow ? 12 : 16, btnGap = narrow ? 3 : 4;

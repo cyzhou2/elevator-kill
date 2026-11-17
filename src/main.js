@@ -48,11 +48,13 @@
     lastTs = 0;
     EK.UI.resetLog();
     EK.UI.hideOverlay();
+    EK.UI.loadInputs(settings);
     EK.UI.update(world, settings, human);
     raf = requestAnimationFrame(loop);
     if (showIntro) {
+      introSeen = true;
       setPaused(true);
-      EK.UI.showIntro(() => { introSeen = true; setPaused(false); });
+      EK.UI.openMenu('guide');
     }
   }
 
@@ -62,9 +64,6 @@
     if (!lastTs) lastTs = now;
     let dt = Math.min(0.12, now - lastTs);
     lastTs = now;
-
-    settings.speed = parseFloat($('speedSel').value) || 1;
-    settings.view = $('viewSel').value;
 
     applyInput();
     if (!paused && !world.finished) {
@@ -142,13 +141,13 @@
     KeyS: 'down', ArrowDown: 'down',
     KeyQ: 'q', KeyE: 'e',
     Space: 'space',
-    KeyP: 'pause', KeyR: 'reset'
+    KeyP: 'pause', Escape: 'cancel'
   };
 
   /** 统一的一次性动作入口：键盘和触屏都走这里 */
   function doAction(act) {
     if (!human || !human.alive || paused || world.finished) return;
-    if (EK.UI.introOpen && EK.UI.introOpen()) return;
+    if (EK.UI.menuOpen && EK.UI.menuOpen()) return;
     if (act === 'space') world.humanAction(human, 'space');
     else if (act === 'up') actUp();
     else if (act === 'down') actDown();
@@ -161,21 +160,25 @@
     if (action === 'left') { keys.left = pressed; return; }
     if (action === 'right') { keys.right = pressed; return; }
     if (!pressed) return;
-    if (action === 'pause') { setPaused(!paused); return; }
-    if (action === 'reset') { boot(); return; }
+    if (action === 'pause') { togglePause(); return; }
     doAction(action);
   }
 
   document.addEventListener('keydown', (e) => {
+    // 长按产生的系统重复事件：不重复执行动作（否则按住键超过 1 秒会一顿一顿的）
+    if (e.repeat) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+      return;
+    }
     if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
-    if (e.repeat) { if (['ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault(); return; }
 
     const act = KEY_ACTIONS[e.code];
     if (!act) return;
     e.preventDefault();
-    if (act === 'pause') { setPaused(!paused); return; }
-    if (act === 'reset') { boot(); return; }
+    if (act === 'pause') { togglePause(); return; }
+    if (act === 'cancel') { if (EK.UI.menuOpen()) cancelMenu(); return; }
+    if (EK.UI.menuOpen()) return;          // 菜单开着时不吃游戏按键
     doAction(act);
   });
 
@@ -248,8 +251,6 @@
       btn.addEventListener('pointerleave', up);
       btn.addEventListener('contextmenu', (e) => e.preventDefault());
     }
-    // 手机上没有键盘，靠这两个键暂停/重开
-    $('btnPause').addEventListener('click', () => {});
   })();
 
   function setPaused(v) {
@@ -258,14 +259,31 @@
     if (btn) btn.textContent = paused ? '继续' : '暂停';
   }
 
-  /* ---------- 按钮 ---------- */
-  $('btnStart').onclick = () => boot();
-  $('btnPause').onclick = () => setPaused(!paused);
-  $('btnReset').onclick = () => boot();
-  $('btnHelp').onclick = () => {
+  function togglePause() {
+    if (world && world.finished) return;
+    if (paused) { EK.UI.closeMenu(); setPaused(false); return; }   // 继续
     setPaused(true);
-    EK.UI.showIntro(() => setPaused(false));
-  };
+    EK.UI.openMenu('guide');
+  }
+
+  /** 取消：丢弃菜单里的改动，回到暂停中的这一局 */
+  function cancelMenu() {
+    EK.UI.loadInputs(settings);
+    EK.UI.closeMenu();
+    setPaused(true);
+  }
+
+  /** 应用：按菜单里的参数立刻重开一局 */
+  function applyMenu() {
+    EK.UI.closeMenu();
+    boot();
+  }
+
+  /* ---------- 按钮 ---------- */
+  $('btnStart').onclick = () => { EK.UI.closeMenu(); boot(); };
+  $('btnPause').onclick = () => togglePause();
+  $('menuApply').onclick = () => applyMenu();
+  $('menuCancel').onclick = () => cancelMenu();
 
   EK.UI.init();
   boot({ intro: !introSeen });
@@ -286,7 +304,7 @@
     /** 手动推进（自动化测试用） */
     tick(seconds) {
       applyInput();
-      const total = (seconds || 0.05) * (parseFloat($('speedSel').value) || 1);
+      const total = (seconds || 0.05) * (settings.speed || 1);
       const slice = 0.05;
       for (let t = 0; t < total; t += slice) world.step(Math.min(slice, total - t));
       renderer.draw(world, settings.view, currentFocus());
