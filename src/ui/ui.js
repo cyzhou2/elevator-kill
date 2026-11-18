@@ -56,7 +56,7 @@
         <table class="keys">
           <tr><td><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd></td><td>左右移动（按住即可，长按不会卡）</td></tr>
           <tr><td><kbd>W</kbd><kbd>S</kbd></td><td>楼梯口上楼 / 下楼；楼梯上按反方向键，原地掉头走回出发点</td></tr>
-          <tr><td><kbd>Q</kbd><kbd>E</kbd></td><td>电梯厅里按 ▼ / ▲ 呼梯（画面最左一列是 C 的按钮，最右一列是 D 的，和楼层对齐）；进轿厢后是开门 / 关门</td></tr>
+          <tr><td><kbd>Q</kbd><kbd>E</kbd></td><td>电梯厅里按 ▼ / ▲ 呼梯（画面最左一列是 C 的按钮，最右一列是 D 的，和楼层对齐）；进轿厢后 <b>E 开门 / Q 关门</b>（和轿厢面板上开下关一致）</td></tr>
           <tr><td><kbd>空格</kbd></td><td>站在电梯厅左半边按 ▼、右半边按 ▲；电梯门开着时进 / 出电梯</td></tr>
           <tr><td><kbd>P</kbd></td><td>暂停，并打开这个菜单（教程 / 设置）</td></tr>
           <tr><td>鼠标</td><td>点地面走过去 · 点别的楼层自动前往（近的两层走楼梯，远的等电梯）· 点楼梯竖井自动爬楼梯 · 点轿厢走进去 · 轿厢里点楼层标识框选层（再点取消）· 两侧是开 / 关门</td></tr>
@@ -64,6 +64,8 @@
         <p class="tiny">设置页里「呼梯按钮」的小圆点：亮 = 两部梯公用一套按钮（系统派梯）；灭 = 每部梯一套。改完点「应用」会立刻用新参数重开一局，「取消」则丢弃改动。</p>`
     }
   ];
+
+  const STORE_KEY = 'elevator-kill.settings.v1';
 
   const UI = {
     menu: { page: 0, tab: 'guide', bound: false },
@@ -98,9 +100,20 @@
       }
       $('hallToggle').addEventListener('click', () => this.setHallMode(this.hallMode === 'shared' ? 'split' : 'shared'));
       this.setHallMode(D.elevator.hallButtons || 'shared');
+      // 恢复上次「确认并开始」用过的参数（刷新/重开页面也不会丢）
+      const stored = this.loadStored();
+      if (stored) { try { this.loadInputs(stored); } catch (_) {} }
       const mv = $('menuVer');
       if (mv) mv.textContent = EK.VERSION;
       document.title = `电梯公寓大逃杀 ${EK.VERSION}`;
+    },
+
+    saveSettings() {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(this.readSettings())); } catch (_) {}
+    },
+
+    loadStored() {
+      try { const s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch (_) { return null; }
     },
 
     setHallMode(m) {
@@ -110,8 +123,14 @@
     },
 
     readSettings() {
-      const num = (id) => parseFloat($(id).value);
-      const vision = num('pVision');
+      // 任何一个控件缺失/被浏览器还原成空值时，退回默认值，避免 NaN 让整局参数「看起来被调回去了」
+      const D = EK.DEFAULTS;
+      const num = (id, dflt) => {
+        const el = $(id);
+        const v = el ? parseFloat(el.value) : NaN;
+        return isFinite(v) ? v : dflt;
+      };
+      const vision = num('pVision', D.kid.vision);
       // 手机（竖屏/窄屏）固定当小孩 + 黑暗视角，菜单里也不给换
       const mobile = this.isMobile();
       return {
@@ -119,21 +138,21 @@
         view: mobile ? 'fog' : $('viewSel').value,
         speed: parseFloat($('speedSel').value),
         cfg: {
-          kids: parseInt($('kidsNum').value, 10) || 3,
-          killers: parseInt($('killersNum').value, 10) || 2,
-          roundSeconds: parseInt($('roundNum').value, 10) || 180,
-          corridorSideM: num('pCorridor'),
+          kids: parseInt(($('kidsNum') || {}).value, 10) || D.kids,
+          killers: parseInt(($('killersNum') || {}).value, 10) || D.killers,
+          roundSeconds: parseInt(($('roundNum') || {}).value, 10) || D.roundSeconds,
+          corridorSideM: num('pCorridor', D.corridorSideM),
           elevator: {
-            secPerFloor: num('pSecFloor'),
-            doorOpenSec: num('pDoorOpen'),
-            doorHoldSec: num('pDoorHold'),
-            doorCloseSec: num('pDoorClose'),
+            secPerFloor: num('pSecFloor', D.elevator.secPerFloor),
+            doorOpenSec: num('pDoorOpen', D.elevator.doorOpenSec),
+            doorHoldSec: num('pDoorHold', D.elevator.doorHoldSec),
+            doorCloseSec: num('pDoorClose', D.elevator.doorCloseSec),
             hallButtons: this.hallMode
           },
-          kid: { speed: num('pKidSpeed'), stairSpeed: num('pKidStair'), vision, reactionSec: num('pReaction') },
-          killer: { speed: num('pKillerSpeed'), stairSpeed: num('pKillerStair'), vision },
-          capture: { gripSec: num('pGrip') },
-          channel: { ttlSec: num('pChannel') }
+          kid: { speed: num('pKidSpeed', D.kid.speed), stairSpeed: num('pKidStair', D.kid.stairSpeed), vision, reactionSec: num('pReaction', D.kid.reactionSec) },
+          killer: { speed: num('pKillerSpeed', D.killer.speed), stairSpeed: num('pKillerStair', D.killer.stairSpeed), vision },
+          capture: { gripSec: num('pGrip', D.capture.gripSec) },
+          channel: { ttlSec: num('pChannel', D.channel.ttlSec) }
         }
       };
     },
@@ -272,7 +291,7 @@
         const car = world.elev.get(L.carId);
         const dir = car.dir > 0 ? '▲上行' : car.dir < 0 ? '▼下行' : '■待机';
         const pressed = [...car.carCalls].sort((x, y) => x - y).map((f) => f + 'F').join(' ');
-        const tail = car.doorsOpen ? ' · 空格下梯 · Q 开门 · E 关门' : ' · Q 开门 · E 关门';
+        const tail = car.doorsOpen ? ' · 空格下梯 · E 开门 · Q 关门' : ' · E 开门 · Q 关门';
         el.textContent = `${car.id} 梯内 · ${Math.round(car.floor)}F ${dir} · 已按 ${pressed || '无'}${tail}`;
         return;
       }

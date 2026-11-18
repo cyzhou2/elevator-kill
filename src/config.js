@@ -4,7 +4,7 @@
 (function () {
   const EK = (globalThis.EK = globalThis.EK || {});
 
-  EK.VERSION = 'v8.2';
+  EK.VERSION = 'v8.3';
 
   const DEFAULTS = {
     floors: 20,

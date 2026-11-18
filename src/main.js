@@ -129,14 +129,14 @@
   function actQ() {
     if (!human || !human.alive) return;
     if (human.location.type === 'floor') world.humanAction(human, 'callDown');
-    else if (human.location.type === 'car') world.humanAction(human, 'openDoor');
+    else if (human.location.type === 'car') world.humanAction(human, 'closeDoor');   // 下键=关门，和轿厢面板下格一致
   }
 
-  /** E：电梯厅 = 按▲ / 轿厢 = 关门 */
+  /** E：电梯厅 = 按▲ / 轿厢 = 开门（上键=开门，和轿厢面板上格一致） */
   function actE() {
     if (!human || !human.alive) return;
     if (human.location.type === 'floor') world.humanAction(human, 'callUp');
-    else if (human.location.type === 'car') world.humanAction(human, 'closeDoor');
+    else if (human.location.type === 'car') world.humanAction(human, 'openDoor');
   }
 
   const KEY_ACTIONS = {
@@ -418,6 +418,12 @@
   function applyMenu() {
     EK.UI.closeMenu();
     boot();
+    EK.UI.saveSettings();               // 记住这次用的参数，刷新页面也不丢
+    const c = settings.cfg;
+    if (world) {
+      world.log('参数已应用：小孩 ' + c.kids + ' · 杀人犯 ' + c.killers + ' · 时长 ' + c.roundSeconds + 's'
+        + ' · 楼道长 ' + c.corridorSideM + 'm · 小孩速 ' + c.kid.speed + ' · 杀人犯速 ' + c.killer.speed, 'sys', null);
+    }
   }
 
   /* ---------- 按钮 ---------- */
